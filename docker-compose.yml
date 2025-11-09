@@ -1,21 +1,4 @@
 ﻿services:
-  garmindb:
-    build:
-      context: ./garmindb
-      dockerfile: Dockerfile
-    container_name: garmindb
-    restart: always
-    environment:
-      - GARMIN_USERNAME=${GARMIN_USERNAME}
-      - GARMIN_PASSWORD=${GARMIN_PASSWORD}
-      - GARMIN_START_DATE=${GARMIN_START_DATE}
-      - GARMIN_END_DATE=${GARMIN_END_DATE}
-      - GARMIN_OUTPUT_DB=/data/garmin.sqlite
-      - GARMIN_FLAGS=--activities --sleep --heart --import --analyze --latest
-      - GARMIN_REFRESH_MINUTES=${GARMIN_REFRESH_MINUTES}
-    volumes:
-      - garmin-data:/data
-
   web:
     build:
       context: .
@@ -24,14 +7,18 @@
     restart: always
     ports:
       - "5000:80"
-    depends_on:
-      - garmindb
     environment:
-      - GARMIN_DB_PATH=/data/garmin.sqlite
+      - APP_DATA_DIR=/app/data
+      - GARMIN_USERNAME=${GARMIN_USERNAME}
+      - GARMIN_PASSWORD=${GARMIN_PASSWORD}
+      - GARMIN_START_DATE=${GARMIN_START_DATE}
+      - GARMIN_END_DATE=${GARMIN_END_DATE}
+      - GARMIN_REFRESH_MINUTES=${GARMIN_REFRESH_MINUTES}
+      - GARMIN_MAX_ACTIVITIES=${GARMIN_MAX_ACTIVITIES}
     volumes:
-      - garmin-data:/data
+      - garmin-data:/app/data
     healthcheck:
-      test: [ "CMD-SHELL", "test -f /data/garmin.sqlite || exit 1" ]
+      test: [ "CMD-SHELL", "test -f /app/data/garmin_app.db || exit 1" ]
       interval: 30s
       timeout: 10s
       retries: 5

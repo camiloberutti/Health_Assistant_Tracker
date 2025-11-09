@@ -23,7 +23,7 @@ namespace GarminTempApi.Background
             {
                 try
                 {
-                    // TODO: use GarminDbReader or API tokens to import new activities
+                    // TODO: wire GarminDataSyncService for periodic imports if background polling is required
                     await Task.Delay(TimeSpan.FromMinutes(5), stoppingToken);
                 }
                 catch (TaskCanceledException) { /* shutting down */ }

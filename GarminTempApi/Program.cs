@@ -1,41 +1,58 @@
+using System.IO;
+using GarminTempApi.Services;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+
 var builder = WebApplication.CreateBuilder(args);
 
 // Add services to the container.
-// Learn more about configuring OpenAPI at https://aka.ms/aspnet/openapi
+builder.Services.AddControllers();
+builder.Services.AddRazorPages();
 builder.Services.AddOpenApi();
 
+// Determine application data directory for the local SQLite database
+var dataDirectory = Environment.GetEnvironmentVariable("APP_DATA_DIR")
+                    ?? builder.Configuration["Data:Directory"]
+                    ?? Path.Combine(builder.Environment.ContentRootPath, "data");
+
+Directory.CreateDirectory(dataDirectory);
+var sqlitePath = Path.Combine(dataDirectory, "garmin_app.db");
+
+// Register Garmin Connect importer and synchronization services
+builder.Services.AddSingleton<GarminConnectImporter>();
+builder.Services.AddSingleton<GarminDataSyncService>();
+builder.Services.AddHostedService<GarminSyncHostedService>();
+
+// Register EF Core sqlite (local app DB)
+builder.Services.AddDbContext<GarminTempApi.Data.AppDbContext>(options =>
+    options.UseSqlite(builder.Configuration.GetConnectionString("Default") ?? $"Data Source={sqlitePath}"));
+
+// Register other services used by project
+builder.Services.AddScoped<GarminTempApi.Services.ActivityService>();
+builder.Services.AddScoped<GarminTempApi.Services.IActivityParser, GarminTempApi.Services.GpxTcxParser>();
+builder.Services.AddScoped<GarminTempApi.Services.FitActivityParser>();
+
 var app = builder.Build();
+
+using (var scope = app.Services.CreateScope())
+{
+    var db = scope.ServiceProvider.GetRequiredService<GarminTempApi.Data.AppDbContext>();
+    db.Database.EnsureCreated();
+}
 
 // Configure the HTTP request pipeline.
 if (app.Environment.IsDevelopment())
 {
+    app.UseDeveloperExceptionPage();
     app.MapOpenApi();
 }
 
+app.UseStaticFiles();
+app.UseRouting();
 app.UseHttpsRedirection();
+app.UseAuthorization();
 
-var summaries = new[]
-{
-    "Freezing", "Bracing", "Chilly", "Cool", "Mild", "Warm", "Balmy", "Hot", "Sweltering", "Scorching"
-};
-
-app.MapGet("/weatherforecast", () =>
-{
-    var forecast =  Enumerable.Range(1, 5).Select(index =>
-        new WeatherForecast
-        (
-            DateOnly.FromDateTime(DateTime.Now.AddDays(index)),
-            Random.Shared.Next(-20, 55),
-            summaries[Random.Shared.Next(summaries.Length)]
-        ))
-        .ToArray();
-    return forecast;
-})
-.WithName("GetWeatherForecast");
+app.MapControllers();
+app.MapRazorPages();
 
 app.Run();
-
-record WeatherForecast(DateOnly Date, int TemperatureC, string? Summary)
-{
-    public int TemperatureF => 32 + (int)(TemperatureC / 0.5556);
-}

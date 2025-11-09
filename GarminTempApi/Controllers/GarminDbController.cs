@@ -1,5 +1,8 @@
-﻿using Microsoft.AspNetCore.Mvc;
+﻿using System.Linq;
 using System.Threading.Tasks;
+using GarminTempApi.Data;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 
 namespace GarminTempApi.Controllers
 {
@@ -7,16 +10,28 @@ namespace GarminTempApi.Controllers
     [Route("api/garmindb")]
     public class GarminDbController : ControllerBase
     {
-        private readonly GarminTempApi.Services.GarminDbReader _reader;
-        public GarminDbController(GarminTempApi.Services.GarminDbReader reader) => _reader = reader;
+        private readonly AppDbContext _db;
+        public GarminDbController(AppDbContext db) => _db = db;
 
         [HttpGet("activities")]
         public async Task<IActionResult> GetActivities([FromQuery] int limit = 50)
         {
-            if (!await _reader.DbExistsAsync())
-                return Problem("Garmin DB not available yet.", statusCode: 503);
+            var rows = await _db.Activities
+                .OrderByDescending(a => a.StartTime)
+                .Take(Math.Max(1, Math.Min(limit, 500)))
+                .Select(a => new
+                {
+                    a.Id,
+                    a.ExternalId,
+                    a.ActivityType,
+                    a.DistanceMeters,
+                    DurationSeconds = a.Duration.TotalSeconds,
+                    a.StartTime,
+                    a.Source,
+                    a.FileName
+                })
+                .ToListAsync();
 
-            var rows = await _reader.GetActivitiesAsync(limit);
             return Ok(rows);
         }
     }

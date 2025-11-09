@@ -1,0 +1,28 @@
+@page
+@model GarminTempApi.Pages.Insights.IndexModel
+@{
+    Layout = "_Layout";
+}
+
+<h2>Insights (Chat)</h2>
+
+<div class="mb-3">
+    <label for="prompt" class="form-label">Ask about your activities</label>
+    <textarea id="prompt" class="form-control" rows="4"></textarea>
+    <button id="sendBtn" class="btn btn-primary mt-2">Send</button>
+    <div id="reply" class="mt-3"></div>
+</div>
+
+<script>
+    document.getElementById('sendBtn').addEventListener('click', async () => {
+        const prompt = document.getElementById('prompt').value;
+        document.getElementById('reply').innerText = 'Sending...';
+        const res = await fetch('/api/insights/query', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ prompt })
+        });
+        const json = await res.json();
+        document.getElementById('reply').innerText = json.reply;
+    });
+</script>

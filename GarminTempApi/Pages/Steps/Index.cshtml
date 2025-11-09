@@ -1,0 +1,41 @@
+@page
+@model GarminTempApi.Pages.Steps.IndexModel
+@{
+    Layout = "_Layout";
+}
+
+<h2>Steps</h2>
+
+@if (Model.Items == null || Model.Items.Count == 0)
+{
+    <div class="alert alert-info">No step summaries available yet.</div>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Total Steps</th>
+                <th>Goal</th>
+                <th>Distance (km)</th>
+                <th>Active Calories</th>
+                <th>Total Calories</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var item in Model.Items)
+        {
+            var distanceKm = item.TotalDistanceMeters / 1000.0;
+            <tr>
+                <td>@item.Date.ToString("yyyy-MM-dd")</td>
+                <td>@item.TotalSteps.ToString("0")</td>
+                <td>@item.GoalSteps.ToString("0")</td>
+                <td>@distanceKm.ToString("0.00")</td>
+                <td>@item.ActiveCalories.ToString("0")</td>
+                <td>@item.TotalCalories.ToString("0")</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

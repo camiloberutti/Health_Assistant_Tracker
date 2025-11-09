@@ -1,0 +1,40 @@
+@page
+@model GarminTempApi.Pages.Activities.IndexModel
+@{
+    Layout = "_Layout";
+}
+
+<h2>Activities</h2>
+
+@if (Model.Activities == null || !Model.Activities.Any())
+{
+    <div class="alert alert-info">No activities available yet.</div>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Id</th>
+                <th>Name</th>
+                <th>Start</th>
+                <th>Distance (m)</th>
+                <th>Duration (s)</th>
+                <th>Sport</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var a in Model.Activities)
+        {
+            <tr>
+                <td>@a.ActivityId</td>
+                <td>@a.ActivityName</td>
+                <td>@a.StartTime.ToString("s")</td>
+                <td>@String.Format("{0:0}", a.DistanceMeters)</td>
+                <td>@String.Format("{0:0}", a.DurationSeconds)</td>
+                <td>@a.Sport</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}

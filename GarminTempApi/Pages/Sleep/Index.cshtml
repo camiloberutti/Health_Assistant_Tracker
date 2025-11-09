@@ -1,0 +1,44 @@
+@page
+@model GarminTempApi.Pages.Sleep.IndexModel
+@{
+    Layout = "_Layout";
+}
+
+<h2>Sleep</h2>
+
+@if (Model.Items == null || Model.Items.Count == 0)
+{
+    <div class="alert alert-info">No sleep summaries available yet.</div>
+}
+else
+{
+    <table class="table table-striped">
+        <thead>
+            <tr>
+                <th>Date</th>
+                <th>Total</th>
+                <th>Deep</th>
+                <th>Light</th>
+                <th>REM</th>
+                <th>Awake</th>
+                <th>Score</th>
+                <th>Quality</th>
+            </tr>
+        </thead>
+        <tbody>
+        @foreach (var item in Model.Items)
+        {
+            <tr>
+                <td>@item.Date.ToString("yyyy-MM-dd")</td>
+                <td>@TimeSpan.FromSeconds(item.TotalSleepSeconds).ToString(@"hh\:mm")</td>
+                <td>@TimeSpan.FromSeconds(item.DeepSleepSeconds).ToString(@"hh\:mm")</td>
+                <td>@TimeSpan.FromSeconds(item.LightSleepSeconds).ToString(@"hh\:mm")</td>
+                <td>@TimeSpan.FromSeconds(item.RemSleepSeconds).ToString(@"hh\:mm")</td>
+                <td>@TimeSpan.FromSeconds(item.AwakeSeconds).ToString(@"hh\:mm")</td>
+                <td>@(item.SleepScore?.ToString("0") ?? "–")</td>
+                <td>@(string.IsNullOrWhiteSpace(item.SleepQualityType) ? "–" : item.SleepQualityType)</td>
+            </tr>
+        }
+        </tbody>
+    </table>
+}
