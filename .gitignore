@@ -1,0 +1,65 @@
+# Visual Studio / .NET defaults
+.vs/
+bin/
+obj/
+**/bin/
+**/obj/
+*.user
+*.suo
+*.userosscache
+*.sln.docstates
+
+# Rider
+.idea/
+
+# Build results
+build/
+
+# Publish output
+publish/
+
+# Logs
+*.log
+
+# OS files
+Thumbs.db
+.DS_Store
+
+# npm
+node_modules/
+
+# Docker
+docker-compose.override.yml
+*.dockerignore
+
+# VS Code
+.vscode/
+
+# NuGet
+*.nupkg
+.nuget/
+
+# Azure Pipelines
+.vspscc
+
+# Local database files
+*.sqlite
+*.db
+
+# Secrets
+*.env
+
+# JetBrains Rider
+.idea/
+
+# Test result files
+TestResults/
+
+# local tool configuration
+.localtools.json
+
+# User-specific files
+*.user
+
+# Ignore publish folder used by Dockerfile
+/app/publish/
