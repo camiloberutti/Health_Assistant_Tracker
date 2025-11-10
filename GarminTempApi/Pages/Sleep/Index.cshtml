@@ -1,44 +1,532 @@
-@page
+@page "/Sleep/Trends"
 @model GarminTempApi.Pages.Sleep.IndexModel
+@using System.Linq
+@using System.Text.Json
+@using System.Text.Json.Serialization
 @{
     Layout = "_Layout";
-}
 
-<h2>Sleep</h2>
+    var serializerOptions = new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
+    var rangeJson = JsonSerializer.Serialize(Model.RangePayloads, serializerOptions);
+    var availableRangeKeys = new[] { "7d", "4w", "1y" }
+    .Where(key => Model.RangePayloads.ContainsKey(key))
+    .ToList();
+    var initialRange = availableRangeKeys.FirstOrDefault();
+    var hasRanges = availableRangeKeys.Count > 0;
+    var recentItems = Model.RecentItems ?? Array.Empty<GarminTempApi.Pages.Sleep.IndexModel.SleepRow>();
+}
 
 @if (Model.Items == null || Model.Items.Count == 0)
 {
-    <div class="alert alert-info">No sleep summaries available yet.</div>
+    <div class="alert alert-info d-flex align-items-center gap-3" role="status">
+        <div class="spinner-border text-info" aria-hidden="true"></div>
+        <div>
+            <div class="fw-semibold">Sleep data is still syncing.</div>
+            <div class="text-muted small">Leave this page open and refresh in a moment once uploads finish.</div>
+        </div>
+    </div>
 }
 else
 {
-    <table class="table table-striped">
-        <thead>
-            <tr>
-                <th>Date</th>
-                <th>Total</th>
-                <th>Deep</th>
-                <th>Light</th>
-                <th>REM</th>
-                <th>Awake</th>
-                <th>Score</th>
-                <th>Quality</th>
-            </tr>
-        </thead>
-        <tbody>
-        @foreach (var item in Model.Items)
-        {
-            <tr>
-                <td>@item.Date.ToString("yyyy-MM-dd")</td>
-                <td>@TimeSpan.FromSeconds(item.TotalSleepSeconds).ToString(@"hh\:mm")</td>
-                <td>@TimeSpan.FromSeconds(item.DeepSleepSeconds).ToString(@"hh\:mm")</td>
-                <td>@TimeSpan.FromSeconds(item.LightSleepSeconds).ToString(@"hh\:mm")</td>
-                <td>@TimeSpan.FromSeconds(item.RemSleepSeconds).ToString(@"hh\:mm")</td>
-                <td>@TimeSpan.FromSeconds(item.AwakeSeconds).ToString(@"hh\:mm")</td>
-                <td>@(item.SleepScore?.ToString("0") ?? "–")</td>
-                <td>@(string.IsNullOrWhiteSpace(item.SleepQualityType) ? "–" : item.SleepQualityType)</td>
-            </tr>
+    <style>
+        .sleep-chart-wrapper {
+            height: 260px;
+            max-height: 260px;
         }
-        </tbody>
-    </table>
+
+        .sleep-chart-wrapper canvas {
+            height: 100% !important;
+            width: 100% !important;
+        }
+    </style>
+
+    if (hasRanges)
+    {
+        <div class="d-flex flex-column flex-lg-row align-items-start align-items-lg-center justify-content-between gap-3 mb-4">
+            <div class="d-flex flex-column">
+                <h2 class="mb-0">Sleep</h2>
+                <p class="text-muted mb-0">Review nightly trends and quality metrics.</p>
+            </div>
+            <div class="d-flex flex-wrap gap-2">
+                <a class="btn btn-outline-secondary" href="/Sleep">View Today</a>
+                <div class="btn-group" role="group" aria-label="Sleep range toggles">
+                    <button type="button" class="btn btn-outline-primary @(initialRange == "7d" ? "active" : string.Empty)"
+                        data-range="7d" @(Model.RangePayloads.ContainsKey("7d") ? string.Empty : "disabled")>7 Days</button>
+                    <button type="button" class="btn btn-outline-primary @(initialRange == "4w" ? "active" : string.Empty)"
+                        data-range="4w" @(Model.RangePayloads.ContainsKey("4w") ? string.Empty : "disabled")>4 Weeks</button>
+                    <button type="button" class="btn btn-outline-primary @(initialRange == "1y" ? "active" : string.Empty)"
+                        data-range="1y" @(Model.RangePayloads.ContainsKey("1y") ? string.Empty : "disabled")>1 Year</button>
+                </div>
+            </div>
+        </div>
+
+        <div class="row g-3 mb-4" id="sleepSummary">
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h6 class="text-uppercase text-muted small mb-2">Avg Total Sleep</h6>
+                        <h3 class="fw-semibold mb-1" id="summaryTotalValue">--</h3>
+                        <p class="text-muted mb-0 small" id="summaryGoalDelta">Goal data unavailable</p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h6 class="text-uppercase text-muted small mb-2">Sleep Score</h6>
+                        <h3 class="fw-semibold mb-1" id="summaryScoreValue">--</h3>
+                        <p class="text-muted mb-0 small" id="summaryScoreDetail"></p>
+                    </div>
+                </div>
+            </div>
+            <div class="col-md-4">
+                <div class="card h-100">
+                    <div class="card-body">
+                        <h6 class="text-uppercase text-muted small mb-2">Recovery Signals</h6>
+                        <h3 class="fw-semibold mb-1" id="summaryRestingHr">--</h3>
+                        <p class="text-muted mb-0 small" id="summaryRestDetail">--</p>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h5 class="mb-0">Sleep Duration Breakdown</h5>
+                    <span class="text-muted small" id="chartRangeLabel"></span>
+                </div>
+                <div class="sleep-chart-wrapper">
+                    <canvas id="sleepChart"></canvas>
+                </div>
+            </div>
+        </div>
+
+        <div class="card mb-4">
+            <div class="card-body">
+                <h5 class="card-title">Quality Distribution</h5>
+                <div class="progress" style="height: 20px;" id="qualityDistribution"></div>
+                <div class="d-flex flex-wrap gap-2 small text-muted mt-2" id="qualityLabels"></div>
+            </div>
+        </div>
+    }
+    else
+    {
+        <div class="alert alert-warning d-flex align-items-center gap-3" role="status">
+            <div class="spinner-border text-warning" aria-hidden="true"></div>
+            <div>
+                <div class="fw-semibold">Sleep trends are building.</div>
+                <div class="text-muted small">Keep the sync running; charts appear as soon as enough nights are imported.</div>
+            </div>
+        </div>
+    }
+
+    <div class="card">
+        <div class="card-body">
+            <h5 class="card-title">Recent Nights</h5>
+            @if (!recentItems.Any())
+            {
+                <p class="text-muted mb-0">No recent sleep entries found.</p>
+            }
+            else
+            {
+                <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                        <thead>
+                            <tr>
+                                <th scope="col">Date</th>
+                                <th scope="col">Start</th>
+                                <th scope="col">End</th>
+                                <th scope="col">Total</th>
+                                <th scope="col">Deep</th>
+                                <th scope="col">Light</th>
+                                <th scope="col">REM</th>
+                                <th scope="col">Awake</th>
+                                <th scope="col">Score</th>
+                                <th scope="col">Quality</th>
+                                <th scope="col">Resting HR</th>
+                                <th scope="col">Resp.</th>
+                                <th scope="col">SpO2 min</th>
+                                <th scope="col">Body Battery Delta</th>
+                                <th scope="col">Goal Delta</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            @foreach (var item in recentItems)
+                            {
+                                var goalDelta = item.SleepGoalSeconds.HasValue
+                                ? item.TotalSleepSeconds - item.SleepGoalSeconds.Value
+                                : (double?)null;
+                                <tr>
+                                    <td>@item.Date.ToString("yyyy-MM-dd")</td>
+                                    <td>@FormatTimestamp(item.SleepStartLocal)</td>
+                                    <td>@FormatTimestamp(item.SleepEndLocal)</td>
+                                    <td>@FormatDuration(item.TotalSleepSeconds)</td>
+                                    <td>@FormatDuration(item.DeepSleepSeconds)</td>
+                                    <td>@FormatDuration(item.LightSleepSeconds)</td>
+                                    <td>@FormatDuration(item.RemSleepSeconds)</td>
+                                    <td>@FormatDuration(item.AwakeSeconds)</td>
+                                    <td>@FormatNullable(item.SleepScore, "0")</td>
+                                    <td>@(string.IsNullOrWhiteSpace(item.SleepQualityType) ? "--" : item.SleepQualityType)</td>
+                                    <td>@FormatNullable(item.RestingHeartRate, "0")</td>
+                                    <td>@FormatNullable(item.AverageRespirationValue, "0.0")</td>
+                                    <td>@FormatNullable(item.LowestSpO2Value, "0")</td>
+                                    <td>@FormatNullable(item.BodyBatteryChange, "0")</td>
+                                    <td>@FormatGoalDelta(goalDelta)</td>
+                                </tr>
+                            }
+                        </tbody>
+                    </table>
+                </div>
+            }
+        </div>
+    </div>
+
+    <script id="sleep-ranges" type="application/json">@Html.Raw(rangeJson)</script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+        (() => {
+            const rangeDataElement = document.getElementById('sleep-ranges');
+            if (!rangeDataElement) {
+                return;
+            }
+
+            let rangeData = {};
+            try {
+                rangeData = JSON.parse(rangeDataElement.textContent || '{}');
+            } catch (error) {
+                console.warn('Unable to parse sleep range data', error);
+                return;
+            }
+
+            const availableKeys = Object.keys(rangeData)
+                .filter(key => Array.isArray(rangeData[key]?.points) && rangeData[key].points.length);
+            if (!availableKeys.length) {
+                return;
+            }
+
+            const buttons = Array.from(document.querySelectorAll('[data-range]'));
+            buttons.forEach(button => {
+                const key = button.dataset.range;
+                if (!availableKeys.includes(key)) {
+                    button.classList.remove('active');
+                    button.setAttribute('disabled', 'disabled');
+                    return;
+                }
+
+                button.removeAttribute('disabled');
+                button.addEventListener('click', () => {
+                    if (button.classList.contains('active')) {
+                        return;
+                    }
+
+                    buttons.forEach(b => b.classList.toggle('active', b === button));
+                    updateRange(key);
+                });
+            });
+
+            const ctx = document.getElementById('sleepChart');
+            if (!ctx) {
+                return;
+            }
+
+            const datasetDefinitions = [
+                { label: 'Deep', property: 'deepSeconds', backgroundColor: '#673ab7' },
+                { label: 'Light', property: 'lightSeconds', backgroundColor: '#0d6efd' },
+                { label: 'REM', property: 'remSeconds', backgroundColor: '#20c997' },
+                { label: 'Awake', property: 'awakeSeconds', backgroundColor: '#ffc107', borderColor: '#f59e0b' }
+            ];
+
+            let currentPoints = [];
+
+            const sleepChart = new Chart(ctx, {
+                type: 'bar',
+                data: {
+                    labels: [],
+                    datasets: datasetDefinitions.map(def => ({
+                        label: def.label,
+                        data: [],
+                        backgroundColor: def.backgroundColor,
+                        borderColor: def.borderColor ?? def.backgroundColor,
+                        borderWidth: 1,
+                        stack: 'sleep',
+                        customProperty: def.property
+                    }))
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    scales: {
+                        x: {
+                            stacked: true,
+                            ticks: { autoSkip: true, maxRotation: 45, minRotation: 0 }
+                        },
+                        y: {
+                            stacked: true,
+                            beginAtZero: true,
+                            ticks: {
+                                callback: value => `${value}h`
+                            }
+                        }
+                    },
+                    plugins: {
+                        legend: { position: 'bottom' },
+                        tooltip: {
+                            callbacks: {
+                                label: context => {
+                                    const property = context.dataset.customProperty;
+                                    const point = currentPoints[context.dataIndex];
+                                    const seconds = point && property ? point[property] ?? 0 : 0;
+                                    return `${context.dataset.label}: ${formatDuration(seconds)}`;
+                                },
+                                footer: items => {
+                                    if (!items.length) {
+                                        return '';
+                                    }
+                                    const point = currentPoints[items[0].dataIndex];
+                                    const totalSeconds = point?.totalSeconds ?? 0;
+                                    const sampleCount = point?.sampleCount ?? 0;
+                                    const sampleSuffix = sampleCount > 1 ? ` (${sampleCount} nights)` : '';
+                                    return `Total: ${formatDuration(totalSeconds)}${sampleSuffix}`;
+                                }
+                            }
+                        }
+                    }
+                }
+            });
+
+            const activeButton = document.querySelector('[data-range].active');
+            const initialKey = activeButton && availableKeys.includes(activeButton.dataset.range)
+                ? activeButton.dataset.range
+                : availableKeys[0];
+
+            buttons.forEach(button => {
+                button.classList.toggle('active', button.dataset.range === initialKey);
+            });
+
+            if (!initialKey) {
+                return;
+            }
+
+            updateRange(initialKey);
+
+            function updateRange(rangeKey) {
+                const payload = rangeData[rangeKey];
+                if (!payload || !Array.isArray(payload.points) || !payload.points.length) {
+                    return;
+                }
+
+                currentPoints = payload.points;
+
+                sleepChart.data.labels = payload.points.map(point => point.label);
+                sleepChart.data.datasets.forEach(dataset => {
+                    const property = dataset.customProperty;
+                    dataset.data = payload.points.map(point => toHours(point[property] ?? 0));
+                });
+                sleepChart.update();
+
+                const rangeLabelParts = [payload.displayLabel, payload.subtitle].filter(Boolean);
+                const rangeLabel = rangeLabelParts.join(' | ');
+                const rangeLabelElement = document.getElementById('chartRangeLabel');
+                if (rangeLabelElement) {
+                    rangeLabelElement.textContent = rangeLabel;
+                }
+
+                updateSummaries(payload);
+                updateQuality(payload.qualityCounts || {});
+            }
+
+            function updateSummaries(payload) {
+                const totalElement = document.getElementById('summaryTotalValue');
+                if (totalElement) {
+                    totalElement.textContent = formatDuration(payload.averageTotalSeconds);
+                }
+
+                const goalElement = document.getElementById('summaryGoalDelta');
+                if (goalElement) {
+                    goalElement.textContent = formatGoalDelta(payload.averageGoalDeltaSeconds);
+                }
+
+                const scoreElement = document.getElementById('summaryScoreValue');
+                if (scoreElement) {
+                    scoreElement.textContent = formatNumber(payload.averageScore, value => String(Math.round(value)));
+                }
+
+                const scoreDetailElement = document.getElementById('summaryScoreDetail');
+                if (scoreDetailElement) {
+                    const topQuality = getTopQuality(payload.qualityCounts || {});
+                    scoreDetailElement.textContent = topQuality ? `Most nights: ${topQuality}` : '';
+                }
+
+                const restingElement = document.getElementById('summaryRestingHr');
+                if (restingElement) {
+                    restingElement.textContent = formatNumber(payload.averageRestingHeartRate, value => `${Math.round(value)} bpm`);
+                }
+
+                const detailElement = document.getElementById('summaryRestDetail');
+                if (detailElement) {
+                    const detailParts = [];
+                    if (payload.averageRespiration != null) {
+                        detailParts.push(`Resp ${payload.averageRespiration.toFixed(1)} br/min`);
+                    }
+                    if (payload.minimumSpO2 != null) {
+                        detailParts.push(`SpO2 ${payload.minimumSpO2.toFixed(0)}%`);
+                    }
+                    if (payload.averageBodyBatteryChange != null) {
+                        detailParts.push(`Body Battery Delta ${payload.averageBodyBatteryChange.toFixed(0)}`);
+                    }
+                    detailElement.textContent = detailParts.length ? detailParts.join(' | ') : '--';
+                }
+            }
+
+            function updateQuality(counts) {
+                const qualityBar = document.getElementById('qualityDistribution');
+                const qualityLabels = document.getElementById('qualityLabels');
+
+                if (!qualityBar || !qualityLabels) {
+                    return;
+                }
+
+                qualityBar.innerHTML = '';
+                qualityLabels.innerHTML = '';
+
+                const entries = Object.entries(counts || {}).sort((a, b) => b[1] - a[1]);
+                const total = entries.reduce((acc, [, value]) => acc + value, 0) || 1;
+
+                entries.forEach(([quality, count]) => {
+                    const percent = Math.round((count / total) * 100);
+                    const bar = document.createElement('div');
+                    bar.className = `progress-bar ${qualityClass(quality)}`;
+                    bar.style.width = `${percent}%`;
+                    bar.setAttribute('role', 'progressbar');
+                    bar.setAttribute('aria-valuenow', percent.toString());
+                    bar.setAttribute('aria-valuemin', '0');
+                    bar.setAttribute('aria-valuemax', '100');
+                    bar.textContent = percent >= 10 ? `${percent}%` : '';
+                    qualityBar.appendChild(bar);
+
+                    const label = document.createElement('span');
+                    label.textContent = `${quality} (${percent}%)`;
+                    qualityLabels.appendChild(label);
+                });
+            }
+
+            function toHours(seconds) {
+                return Math.round((seconds / 3600) * 100) / 100;
+            }
+
+            function formatDuration(seconds) {
+                if (seconds == null) {
+                    return "--";
+                }
+
+                const totalSeconds = Math.max(0, Math.round(seconds));
+                const hours = Math.floor(totalSeconds / 3600);
+                const minutes = Math.floor((totalSeconds % 3600) / 60);
+                return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
+            }
+
+            function formatGoalDelta(seconds) {
+                if (seconds == null) {
+                    return 'Goal data unavailable';
+                }
+
+                const direction = seconds >= 0 ? 'above goal' : 'below goal';
+                const absolute = Math.abs(seconds);
+                const hours = Math.floor(absolute / 3600);
+                const minutes = Math.floor((absolute % 3600) / 60);
+                const parts = [];
+                if (hours > 0) {
+                    parts.push(`${hours}h`);
+                }
+                parts.push(`${minutes.toString().padStart(2, '0')}m`);
+                return `${parts.join(' ')} ${direction}`;
+            }
+
+            function formatNumber(value, formatter) {
+                if (value == null) {
+                    return '--';
+                }
+
+                try {
+                    return formatter(value);
+                } catch (error) {
+                    return '--';
+                }
+            }
+
+            function getTopQuality(counts) {
+                const entries = Object.entries(counts || {});
+                if (!entries.length) {
+                    return null;
+                }
+
+                entries.sort((a, b) => b[1] - a[1]);
+                return entries[0][0];
+            }
+
+            function qualityClass(quality) {
+                if (!quality) {
+                    return 'bg-secondary';
+                }
+
+                switch (quality.trim().toUpperCase()) {
+                    case 'EXCELLENT':
+                    case 'VERY GOOD':
+                    case 'GREAT':
+                    case 'GOOD':
+                        return 'bg-success';
+                    case 'FAIR':
+                    case 'AVERAGE':
+                        return 'bg-warning text-dark';
+                    case 'POOR':
+                    case 'VERY POOR':
+                        return 'bg-danger';
+                    default:
+                        return 'bg-secondary';
+                }
+            }
+        })();
+    </script>
+}
+
+@functions {
+    private static string FormatDuration(double seconds)
+    {
+        var ts = TimeSpan.FromSeconds(Math.Max(0, seconds));
+        return ts.TotalHours >= 10 ? ts.ToString("hh\\:mm") : ts.ToString("h\\:mm");
+    }
+
+    private static string FormatTimestamp(DateTime? timestamp)
+    {
+        return timestamp.HasValue ? timestamp.Value.ToString("MMM dd HH:mm") : "--";
+    }
+
+    private static string FormatNullable(double? value, string format)
+    {
+        return value.HasValue ? value.Value.ToString(format) : "--";
+    }
+
+    private static string FormatGoalDelta(double? seconds)
+    {
+        if (!seconds.HasValue)
+        {
+            return "--";
+        }
+
+        var direction = seconds >= 0 ? "above" : "below";
+        var span = TimeSpan.FromSeconds(Math.Abs(seconds.Value));
+        var parts = new System.Collections.Generic.List<string>();
+        if (span.Hours > 0)
+        {
+            parts.Add($"{span.Hours}h");
+        }
+        parts.Add($"{span.Minutes:D2}m");
+        return string.Join(' ', parts) + $" {direction}";
+    }
 }

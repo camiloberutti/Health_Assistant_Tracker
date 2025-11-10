@@ -6,141 +6,77 @@
     Layout = "_Layout";
     var activity = Model.Activity!;
     var serializerOptions = new JsonSerializerOptions(JsonSerializerDefaults.Web);
+    var trackPointCount = Model.TrackPoints.Count;
 }
-
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha384-EdYikZ6irMIXja+6JGZve56kNjEcNWef39/C4R2tQeM+c/2yZfybp/BPZt6bYp0v" crossorigin=""></script>
-<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
-
-<script>
-    (function () {
-        const trackPoints = @Html.Raw(JsonSerializer.Serialize(Model.TrackPoints.Select(p => new
-            {
-                timestamp = p.Timestamp,
-                latitude = p.Latitude,
-                longitude = p.Longitude,
-                heartRate = p.HeartRate,
-                altitude = p.Altitude
-            }), serializerOptions));
-
-        if (!Array.isArray(trackPoints) || trackPoints.length === 0) {
-            return;
-        }
-
-        const coordinatePairs = trackPoints
-            .filter(p => typeof p.latitude === 'number' && typeof p.longitude === 'number')
-            .map(p => [p.latitude, p.longitude]);
-
-        if (coordinatePairs.length > 0) {
-            const map = L.map('activityMap');
-            L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-                attribution: '&copy; OpenStreetMap contributors'
-            }).addTo(map);
-
-            const polyline = L.polyline(coordinatePairs, { color: '#0d6efd', weight: 4, opacity: 0.8 }).addTo(map);
-            map.fitBounds(polyline.getBounds(), { padding: [20, 20] });
-
-            L.circleMarker(coordinatePairs[0], { color: '#198754', radius: 6 }).addTo(map).bindPopup('Start');
-            L.circleMarker(coordinatePairs[coordinatePairs.length - 1], { color: '#dc3545', radius: 6 }).addTo(map).bindPopup('Finish');
-        }
-        else {
-            document.getElementById('activityMap').innerHTML = '<p class="text-muted m-3">No GPS coordinates available.</p>';
-        }
-
-        const heartSamples = trackPoints.filter(p => typeof p.heartRate === 'number');
-        if (heartSamples.length > 0) {
-            new Chart(document.getElementById('chartHeartRate'), {
-                type: 'line',
-                data: {
-                    labels: heartSamples.map(p => new Date(p.timestamp).toLocaleTimeString()),
-                    datasets: [{
-                        label: 'Heart Rate (bpm)',
-                        data: heartSamples.map(p => p.heartRate),
-                        borderColor: '#dc3545',
-                        backgroundColor: 'rgba(220,53,69,0.15)',
-                        pointRadius: 0,
-                        tension: 0.25
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { title: { display: true, text: 'Time' } },
-                        y: { title: { display: true, text: 'bpm' } }
-                    }
-                }
-            });
-        }
-        else {
-            document.getElementById('chartHeartRate').parentElement.innerHTML = '<p class="text-muted mb-0">No heart rate samples available.</p>';
-        }
-
-        const altitudeSamples = trackPoints.filter(p => typeof p.altitude === 'number');
-        if (altitudeSamples.length > 0) {
-            new Chart(document.getElementById('chartAltitude'), {
-                type: 'line',
-                data: {
-                    labels: altitudeSamples.map(p => new Date(p.timestamp).toLocaleTimeString()),
-                    datasets: [{
-                        label: 'Altitude (m)',
-                        data: altitudeSamples.map(p => p.altitude),
-                        borderColor: '#0d6efd',
-                        backgroundColor: 'rgba(13,110,253,0.1)',
-                        pointRadius: 0,
-                        tension: 0.25
-                    }]
-                },
-                options: {
-                    responsive: true,
-                    maintainAspectRatio: false,
-                    plugins: { legend: { display: false } },
-                    scales: {
-                        x: { title: { display: true, text: 'Time' } },
-                        y: { title: { display: true, text: 'Meters' } }
-                    }
-                }
-            });
-        }
-        else {
-            document.getElementById('chartAltitude').parentElement.innerHTML = '<p class="text-muted mb-0">No altitude samples available.</p>';
-        }
-    })();
-</script>
-
-<h2>@activity.Name</h2>
-<p class="text-muted">Source: @activity.Source · External Id: @activity.ExternalId</p>
-@if (Model.Detail?.FetchedAtUtc is DateTime fetchedAtUtc)
-{
-    <p class="text-muted">Detail fetched @fetchedAtUtc.ToLocalTime().ToString("f")</p>
-}
-
-<style>
-    #activityMap {
-        height: 400px;
-        border-radius: 0.5rem;
-        border: 1px solid #dee2e6;
-        margin-bottom: 2rem;
-    }
-</style>
 
 <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
     integrity="sha384-ZZ1xkZs8AjtKoa6HgMHqmpYyqn1nVbWcv16O3MHuvb6jVWeItPxX2VINqb0BoBP5" crossorigin="" />
 
-<dl class="row">
-    <dt class="col-sm-3">Start Time</dt>
-    <dd class="col-sm-9">@activity.StartTime.ToLocalTime().ToString("f")</dd>
+<style>
+    .activity-meta {
+        color: var(--bs-gray-600);
+    }
 
-    <dt class="col-sm-3">Duration</dt>
-    <dd class="col-sm-9">@activity.Duration.ToString(@"hh\:mm\:ss")</dd>
+    .activity-badges>.badge {
+        font-size: .85rem;
+    }
 
-    <dt class="col-sm-3">Distance</dt>
-    <dd class="col-sm-9">@(activity.DistanceMeters / 1000.0).ToString("0.00") km</dd>
+    #activityMap {
+        height: 360px;
+        width: 100%;
+        border-radius: 0 0 .75rem .75rem;
+    }
 
-    <dt class="col-sm-3">Activity Type</dt>
-    <dd class="col-sm-9">@activity.ActivityType</dd>
-</dl>
+    .map-card .card-body {
+        padding: 0;
+    }
+
+    .visual-card .chart-wrapper {
+        position: relative;
+        height: 280px;
+    }
+
+    .visual-card canvas {
+        width: 100% !important;
+        height: 100% !important;
+    }
+
+    .chart-empty {
+        display: none;
+    }
+
+    .chart-empty.active {
+        display: block;
+    }
+
+    pre.json-block {
+        max-height: 400px;
+        overflow: auto;
+        background-color: var(--bs-gray-100);
+    }
+</style>
+
+<div class="d-flex flex-column flex-lg-row justify-content-between align-items-lg-center gap-3 mb-3">
+    <div>
+        <h2 class="mb-1">@activity.Name</h2>
+        <p class="activity-meta mb-0">
+            @activity.StartTime.ToLocalTime().ToString("f") · @(activity.DistanceMeters / 1000.0).ToString("0.00") km ·
+            @activity.Duration.ToString(@"hh\:mm\:ss")
+        </p>
+    </div>
+    <div class="activity-badges d-flex gap-2">
+        <span class="badge bg-primary-subtle text-primary-emphasis text-uppercase">@activity.ActivityType</span>
+        <span class="badge bg-secondary-subtle text-secondary-emphasis">Source: @activity.Source</span>
+        <span class="badge bg-light text-muted">ID: @activity.ExternalId</span>
+    </div>
+</div>
+
+@if (Model.Detail?.FetchedAtUtc is DateTime fetchedAtUtc)
+{
+    <p class="text-muted small mb-4">Detailed data fetched @fetchedAtUtc.ToLocalTime().ToString("f").</p>
+}
+
+<a class="btn btn-outline-secondary btn-sm mb-4" asp-page="./Index">&larr; Back to activities</a>
 
 @if (Model.DetailErrors.Count > 0)
 {
@@ -173,71 +109,295 @@
     </div>
 }
 
-<a class="btn btn-outline-secondary mb-4" asp-page="Index">Back to list</a>
-
-@if (Model.TrackPoints.Count == 0)
+@if (trackPointCount == 0)
 {
-    <div class="alert alert-secondary">No track points stored for this activity.</div>
+    <div class="alert alert-secondary">
+        No track points are stored for this activity yet. Trigger a full Garmin sync or upload the original file to unlock
+        the map and charts.
+    </div>
 }
 else
 {
-    <div id="activityMap"></div>
-
-    <div class="row g-4 mb-4">
-        <div class="col-lg-6">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Heart Rate</h5>
-                    <canvas id="chartHeartRate" height="200"></canvas>
-                </div>
-            </div>
+    <div class="card shadow-sm mb-4 map-card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="fw-semibold">Route Map</span>
+            <span class="text-muted small">@trackPointCount track points</span>
         </div>
-        <div class="col-lg-6">
-            <div class="card">
-                <div class="card-body">
-                    <h5 class="card-title">Altitude</h5>
-                    <canvas id="chartAltitude" height="200"></canvas>
-                </div>
-            </div>
+        <div class="card-body p-0">
+            <div id="activityMap"></div>
+            <p id="mapEmptyState" class="chart-empty text-muted small px-3 py-3 mb-0">No GPS coordinates available for this
+                activity.</p>
         </div>
     </div>
 
-    <h3>Track Points <small class="text-muted">(showing first @Model.TrackPoints.Count)</small></h3>
-    <div class="table-responsive">
-        <table class="table table-sm table-striped">
-            <thead>
-                <tr>
-                    <th>Timestamp</th>
-                    <th>Latitude</th>
-                    <th>Longitude</th>
-                    <th>Heart Rate</th>
-                    <th>Altitude</th>
-                </tr>
-            </thead>
-            <tbody>
-                @foreach (var point in Model.TrackPoints)
-                {
-                    <tr>
-                        <td>@point.Timestamp.ToString("yyyy-MM-dd HH:mm:ss")</td>
-                        <td>@point.Latitude.ToString("0.000000")</td>
-                        <td>@point.Longitude.ToString("0.000000")</td>
-                        <td>@(point.HeartRate?.ToString("0") ?? "–")</td>
-                        <td>@(point.Altitude?.ToString("0.0") ?? "–")</td>
-                    </tr>
-                }
-            </tbody>
-        </table>
+    <div class="row g-4 mb-4">
+        <div class="col-12 col-lg-4">
+            <div class="card shadow-sm visual-card h-100">
+                <div class="card-header fw-semibold">Heart Rate</div>
+                <div class="card-body">
+                    <div class="chart-wrapper">
+                        <canvas id="chartHeartRate"></canvas>
+                    </div>
+                    <p id="heartEmptyState" class="chart-empty text-muted small mb-0">No heart rate samples available.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-lg-4">
+            <div class="card shadow-sm visual-card h-100">
+                <div class="card-header fw-semibold">Elevation Profile</div>
+                <div class="card-body">
+                    <div class="chart-wrapper">
+                        <canvas id="chartAltitude"></canvas>
+                    </div>
+                    <p id="altitudeEmptyState" class="chart-empty text-muted small mb-0">No altitude readings available.</p>
+                </div>
+            </div>
+        </div>
+        <div class="col-12 col-lg-4">
+            <div class="card shadow-sm visual-card h-100">
+                <div class="card-header fw-semibold">Average Pace</div>
+                <div class="card-body">
+                    <div class="chart-wrapper">
+                        <canvas id="chartPace"></canvas>
+                    </div>
+                    <p id="paceEmptyState" class="chart-empty text-muted small mb-0">Insufficient distance data to calculate
+                        pace.</p>
+                </div>
+            </div>
+        </div>
     </div>
 }
 
 @if (Model.JsonBlocks.Count > 0)
 {
-    <h3 class="mt-5">Garmin Raw Payload</h3>
+    <h3 class="mt-4">Garmin Raw Payload</h3>
     @foreach (var block in Model.JsonBlocks)
     {
         <details class="mb-3">
             <summary class="fw-semibold">@block.Title</summary>
-            <pre class="bg-light border rounded p-3 small mb-0">@block.Json</pre>
+            <pre class="json-block border rounded p-3 small mb-0">@block.Json</pre>
         </details>
     }
 }
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha384-EdYikZ6irMIXja+6JGZve56kNjEcNWef39/C4R2tQeM+c/2yZfybp/BPZt6bYp0v" crossorigin=""></script>
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+    (function () {
+        const trackPoints = @Html.Raw(JsonSerializer.Serialize(Model.TrackPoints.Select(p => new
+            {
+                    timestamp = p.Timestamp,
+                    latitude = p.Latitude,
+                    longitude = p.Longitude,
+                    heartRate = p.HeartRate,
+                    altitude = p.Altitude
+            }), serializerOptions));
+
+        if (!Array.isArray(trackPoints) || trackPoints.length === 0) {
+            return;
+        }
+
+        const mapElement = document.getElementById('activityMap');
+        const mapEmptyState = document.getElementById('mapEmptyState');
+
+        const toDate = (input) => input ? new Date(input) : null;
+        const isNumber = (value) => typeof value === 'number' && !Number.isNaN(value);
+
+        const normalized = trackPoints
+            .map(tp => ({
+                timestamp: toDate(tp.timestamp),
+                latitude: isNumber(tp.latitude) ? tp.latitude : null,
+                longitude: isNumber(tp.longitude) ? tp.longitude : null,
+                heartRate: isNumber(tp.heartRate) ? tp.heartRate : null,
+                altitude: isNumber(tp.altitude) ? tp.altitude : null
+            }))
+            .filter(tp => tp.timestamp instanceof Date && !Number.isNaN(tp.timestamp.getTime()))
+            .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
+
+        if (normalized.length === 0) {
+            mapElement?.classList.add('d-none');
+            mapEmptyState?.classList.add('active');
+            ['heartEmptyState', 'altitudeEmptyState', 'paceEmptyState'].forEach(id => document.getElementById(id)?.classList.add('active'));
+            return;
+        }
+
+        const firstTimestamp = normalized[0].timestamp.getTime();
+        let cumulativeDistanceKm = 0;
+        let lastCoordinate = null;
+
+        const haversine = (lat1, lon1, lat2, lon2) => {
+            const toRad = (deg) => deg * Math.PI / 180;
+            const R = 6371;
+            const dLat = toRad(lat2 - lat1);
+            const dLon = toRad(lon2 - lon1);
+            const a = Math.sin(dLat / 2) * Math.sin(dLat / 2) +
+                Math.cos(toRad(lat1)) * Math.cos(toRad(lat2)) *
+                Math.sin(dLon / 2) * Math.sin(dLon / 2);
+            const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            return R * c;
+        };
+
+        const enriched = normalized.map(point => {
+            const timestampMs = point.timestamp.getTime();
+            const elapsedSeconds = (timestampMs - firstTimestamp) / 1000;
+            let deltaDistanceKm = 0;
+
+            if (isNumber(point.latitude) && isNumber(point.longitude)) {
+                if (lastCoordinate) {
+                    deltaDistanceKm = haversine(lastCoordinate.lat, lastCoordinate.lon, point.latitude, point.longitude);
+                }
+                lastCoordinate = { lat: point.latitude, lon: point.longitude };
+            }
+
+            cumulativeDistanceKm += deltaDistanceKm;
+
+            const pace = cumulativeDistanceKm > 0 ? (elapsedSeconds / 60) / cumulativeDistanceKm : null;
+
+            return {
+                ...point,
+                distanceKm: cumulativeDistanceKm,
+                elapsedSeconds,
+                paceMinutesPerKm: pace,
+                timeLabel: point.timestamp.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+            };
+        });
+
+        const coordinatePoints = enriched.filter(p => isNumber(p.latitude) && isNumber(p.longitude));
+        if (mapElement && typeof L !== 'undefined') {
+            if (coordinatePoints.length === 0) {
+                mapElement.classList.add('d-none');
+                mapEmptyState?.classList.add('active');
+            } else {
+                mapElement.classList.remove('d-none');
+                mapEmptyState?.classList.remove('active');
+                const map = L.map(mapElement, { scrollWheelZoom: false });
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; OpenStreetMap contributors'
+                }).addTo(map);
+
+                const latLngs = coordinatePoints.map(p => [p.latitude, p.longitude]);
+                const polyline = L.polyline(latLngs, { color: '#0d6efd', weight: 4, opacity: 0.85 }).addTo(map);
+
+                L.circleMarker(latLngs[0], { color: '#198754', radius: 6 }).addTo(map).bindPopup('Start');
+                L.circleMarker(latLngs[latLngs.length - 1], { color: '#dc3545', radius: 6 }).addTo(map).bindPopup('Finish');
+
+                map.fitBounds(polyline.getBounds(), { padding: [25, 25] });
+                setTimeout(() => map.invalidateSize(), 150);
+            }
+        }
+
+        if (typeof Chart === 'undefined') {
+            return;
+        }
+
+        const body = window.getComputedStyle(document.body);
+        Chart.defaults.color = body.getPropertyValue('--bs-body-color') || Chart.defaults.color;
+        Chart.defaults.font.family = body.getPropertyValue('--bs-body-font-family') || Chart.defaults.font.family;
+
+        const baseLineOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { intersect: false, mode: 'index' },
+            plugins: { legend: { display: false } }
+        };
+
+        const renderChart = (canvasId, emptyId, config) => {
+            const canvas = document.getElementById(canvasId);
+            const empty = document.getElementById(emptyId);
+            if (!canvas || !empty) {
+                return;
+            }
+
+            if (!config || config.labels.length === 0 || config.datasets.every(ds => ds.data.length === 0)) {
+                empty.classList.add('active');
+                canvas.classList.add('d-none');
+                return;
+            }
+
+            empty.classList.remove('active');
+            canvas.classList.remove('d-none');
+
+            new Chart(canvas.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: config.labels,
+                    datasets: config.datasets
+                },
+                options: {
+                    ...baseLineOptions,
+                    ...config.options
+                }
+            });
+        };
+
+        const heartPoints = enriched.filter(p => isNumber(p.heartRate));
+        renderChart('chartHeartRate', 'heartEmptyState', {
+            labels: heartPoints.map(p => p.timeLabel),
+            datasets: [
+                {
+                    label: 'Heart Rate (bpm)',
+                    data: heartPoints.map(p => p.heartRate),
+                    borderColor: '#dc3545',
+                    backgroundColor: 'rgba(220,53,69,0.15)',
+                    tension: 0.25,
+                    radius: 0
+                }
+            ],
+            options: {
+                scales: {
+                    x: { title: { display: true, text: 'Time' } },
+                    y: { title: { display: true, text: 'bpm' } }
+                }
+            }
+        });
+
+        const altitudePoints = enriched.filter(p => isNumber(p.altitude));
+        renderChart('chartAltitude', 'altitudeEmptyState', {
+            labels: altitudePoints.map(p => p.distanceKm.toFixed(2)),
+            datasets: [
+                {
+                    label: 'Altitude (m)',
+                    data: altitudePoints.map(p => p.altitude),
+                    borderColor: '#0d6efd',
+                    backgroundColor: 'rgba(13,110,253,0.15)',
+                    tension: 0.3,
+                    radius: 0,
+                    fill: true
+                }
+            ],
+            options: {
+                scales: {
+                    x: { title: { display: true, text: 'Distance (km)' } },
+                    y: { title: { display: true, text: 'Meters' } }
+                }
+            }
+        });
+
+        const pacePoints = enriched
+            .filter(p => isNumber(p.paceMinutesPerKm) && p.paceMinutesPerKm > 2 && p.paceMinutesPerKm < 15);
+
+        renderChart('chartPace', 'paceEmptyState', {
+            labels: pacePoints.map(p => p.distanceKm.toFixed(2)),
+            datasets: [
+                {
+                    label: 'Pace (min/km)',
+                    data: pacePoints.map(p => Number(p.paceMinutesPerKm.toFixed(2))),
+                    borderColor: '#20c997',
+                    backgroundColor: 'rgba(32,201,151,0.15)',
+                    tension: 0.3,
+                    radius: 0
+                }
+            ],
+            options: {
+                scales: {
+                    x: { title: { display: true, text: 'Distance (km)' } },
+                    y: {
+                        title: { display: true, text: 'Minutes per km' },
+                        reverse: true
+                    }
+                }
+            }
+        });
+    })();
+</script>

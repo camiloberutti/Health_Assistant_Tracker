@@ -138,6 +138,15 @@ public class GarminDataSyncService
                     summary.AwakeSeconds = entry.AwakeSeconds ?? 0;
                     summary.SleepScore = entry.SleepScore;
                     summary.SleepQualityType = entry.SleepQualityType;
+                    summary.SleepStartLocal = entry.SleepStartLocal;
+                    summary.SleepEndLocal = entry.SleepEndLocal;
+                    summary.SleepStartGmt = entry.SleepStartGmt is null ? null : NormalizeTimestamp(entry.SleepStartGmt.Value);
+                    summary.SleepEndGmt = entry.SleepEndGmt is null ? null : NormalizeTimestamp(entry.SleepEndGmt.Value);
+                    summary.RestingHeartRate = entry.RestingHeartRate;
+                    summary.BodyBatteryChange = entry.BodyBatteryChange;
+                    summary.AverageRespirationValue = entry.AverageRespirationValue;
+                    summary.LowestSpO2Value = entry.LowestSpO2Value;
+                    summary.SleepGoalSeconds = entry.SleepGoalSeconds;
                 }
                 else
                 {
@@ -151,6 +160,15 @@ public class GarminDataSyncService
                         AwakeSeconds = entry.AwakeSeconds ?? 0,
                         SleepScore = entry.SleepScore,
                         SleepQualityType = entry.SleepQualityType,
+                        SleepStartLocal = entry.SleepStartLocal,
+                        SleepEndLocal = entry.SleepEndLocal,
+                        SleepStartGmt = entry.SleepStartGmt is null ? null : NormalizeTimestamp(entry.SleepStartGmt.Value),
+                        SleepEndGmt = entry.SleepEndGmt is null ? null : NormalizeTimestamp(entry.SleepEndGmt.Value),
+                        RestingHeartRate = entry.RestingHeartRate,
+                        BodyBatteryChange = entry.BodyBatteryChange,
+                        AverageRespirationValue = entry.AverageRespirationValue,
+                        LowestSpO2Value = entry.LowestSpO2Value,
+                        SleepGoalSeconds = entry.SleepGoalSeconds,
                     };
                     await db.SleepSummaries.AddAsync(summary, cancellationToken);
                     existingSleep[dateKey] = summary;
@@ -163,6 +181,46 @@ public class GarminDataSyncService
             {
                 pendingSave = true;
                 _logger.LogInformation("Upserted {Count} sleep summaries.", sleepUpserted);
+            }
+        }
+
+        if (fetchResult.SleepDetails.Count > 0)
+        {
+            var detailDates = fetchResult.SleepDetails
+                .Select(d => d.Date.Date)
+                .Distinct()
+                .ToList();
+
+            var existingDetails = await db.SleepDetailSnapshots
+                .Where(d => detailDates.Contains(d.Date))
+                .ToDictionaryAsync(d => d.Date.Date, cancellationToken);
+
+            foreach (var detail in fetchResult.SleepDetails)
+            {
+                var dateKey = detail.Date.Date;
+                var json = JsonSerializer.Serialize(detail, DetailJsonOptions);
+
+                if (existingDetails.TryGetValue(dateKey, out var snapshot))
+                {
+                    if (!string.Equals(snapshot.DetailJson, json, StringComparison.Ordinal))
+                    {
+                        snapshot.DetailJson = json;
+                        snapshot.LastUpdatedUtc = DateTime.UtcNow;
+                        pendingSave = true;
+                    }
+                }
+                else
+                {
+                    var entity = new SleepDetailSnapshot
+                    {
+                        Date = dateKey,
+                        DetailJson = json,
+                        LastUpdatedUtc = DateTime.UtcNow
+                    };
+                    await db.SleepDetailSnapshots.AddAsync(entity, cancellationToken);
+                    existingDetails[dateKey] = entity;
+                    pendingSave = true;
+                }
             }
         }
 

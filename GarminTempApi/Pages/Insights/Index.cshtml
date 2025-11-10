@@ -4,25 +4,88 @@
     Layout = "_Layout";
 }
 
-<h2>Insights (Chat)</h2>
+<h2>Insights</h2>
 
-<div class="mb-3">
-    <label for="prompt" class="form-label">Ask about your activities</label>
-    <textarea id="prompt" class="form-control" rows="4"></textarea>
-    <button id="sendBtn" class="btn btn-primary mt-2">Send</button>
-    <div id="reply" class="mt-3"></div>
+<div class="card mb-4">
+    <div class="card-body">
+        <h5 class="card-title">Daily Recommendation</h5>
+        <p id="dailyRecommendation" class="card-text text-muted">Loading recommendation...</p>
+    </div>
+</div>
+
+<div class="card">
+    <div class="card-body">
+        <h5 class="card-title">Ask About Your Data</h5>
+        <label for="prompt" class="form-label">Question</label>
+        <textarea id="prompt" class="form-control" rows="4"
+            placeholder="How was my training volume last week?"></textarea>
+        <button id="sendBtn" class="btn btn-primary mt-3">Send</button>
+        <div id="chatArea" class="mt-4">
+            <div id="chatStatus" class="text-muted">No questions yet.</div>
+            <div id="reply" class="mt-3"></div>
+        </div>
+    </div>
 </div>
 
 <script>
-    document.getElementById('sendBtn').addEventListener('click', async () => {
-        const prompt = document.getElementById('prompt').value;
-        document.getElementById('reply').innerText = 'Sending...';
-        const res = await fetch('/api/insights/query', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ prompt })
-        });
-        const json = await res.json();
-        document.getElementById('reply').innerText = json.reply;
+    const dailyEl = document.getElementById('dailyRecommendation');
+    const promptEl = document.getElementById('prompt');
+    const replyEl = document.getElementById('reply');
+    const statusEl = document.getElementById('chatStatus');
+
+    async function loadDailyRecommendation() {
+        try {
+            const response = await fetch('/api/insights/daily');
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.error || `HTTP ${response.status}`);
+            }
+
+            const json = await response.json();
+            dailyEl.innerHTML = (json.recommendation || 'No recommendation available.').replace(/\n/g, '<br>');
+        } catch (err) {
+            dailyEl.textContent = `Unable to load recommendation: ${err.message}`;
+        }
+    }
+
+    async function submitPrompt() {
+        const prompt = promptEl.value.trim();
+        if (!prompt) {
+            statusEl.textContent = 'Please enter a question first.';
+            return;
+        }
+
+        statusEl.textContent = 'Thinking...';
+        replyEl.innerHTML = '';
+
+        try {
+            const response = await fetch('/api/insights/query', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ prompt })
+            });
+
+            if (!response.ok) {
+                const error = await response.json().catch(() => ({}));
+                throw new Error(error.error || `HTTP ${response.status}`);
+            }
+
+            const json = await response.json();
+            statusEl.textContent = 'Response';
+            replyEl.innerHTML = (json.reply || '').replace(/\n/g, '<br>');
+        } catch (err) {
+            statusEl.textContent = 'Error';
+            replyEl.textContent = err.message;
+        }
+    }
+
+    document.getElementById('sendBtn').addEventListener('click', submitPrompt);
+
+    promptEl.addEventListener('keydown', (ev) => {
+        if (ev.ctrlKey && ev.key === 'Enter') {
+            submitPrompt();
+        }
     });
+
+    loadDailyRecommendation();
 </script>

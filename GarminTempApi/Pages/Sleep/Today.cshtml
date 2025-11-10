@@ -1,0 +1,565 @@
+@page "/Sleep"
+@model GarminTempApi.Pages.Sleep.TodayModel
+@using System.Text.Json
+@using System.Text.Json.Serialization
+@{
+    Layout = "_Layout";
+
+    var serializerOptions = new JsonSerializerOptions
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull
+    };
+
+    var previousUrl = Model.PreviousDate.HasValue
+        ? Url.Page("/Sleep/Today", new { date = Model.PreviousDate.Value.ToString("yyyy-MM-dd") })
+        : null;
+    var nextUrl = Model.NextDate.HasValue
+        ? Url.Page("/Sleep/Today", new { date = Model.NextDate.Value.ToString("yyyy-MM-dd") })
+        : null;
+    var selectedDateText = Model.SelectedDate?.ToString("dd MMM yyyy");
+    var detailJson = Model.Entry == null
+        ? "null"
+        : JsonSerializer.Serialize(new
+        {
+            totalSeconds = Model.Entry.TotalSleepSeconds,
+            goalSeconds = Model.Entry.SleepGoalSeconds,
+            stageSlices = Model.StageSlices,
+            timeline = Model.StageTimeline,
+            movement = Model.MovementSamples,
+            resting = Model.RestingHeartRateSamples,
+            bodyBattery = Model.BodyBatterySamples,
+            startLocal = Model.Entry.SleepStartLocal,
+            endLocal = Model.Entry.SleepEndLocal
+        }, serializerOptions);
+}
+
+@if (!Model.HasData)
+{
+    <div class="alert alert-info">No sleep details available yet. Run a sync to view the latest night.</div>
+}
+else
+{
+    var entry = Model.Entry!;
+
+    <style>
+        .sleep-today-donut {
+            position: relative;
+            width: 220px;
+            height: 220px;
+        }
+
+        .sleep-donut-center {
+            position: absolute;
+            top: 50%;
+            left: 50%;
+            transform: translate(-50%, -50%);
+            text-align: center;
+        }
+
+        .sleep-donut-center .value {
+            font-size: 1.75rem;
+            font-weight: 600;
+        }
+
+        .sleep-donut-center .label {
+            font-size: 0.9rem;
+            color: #6c757d;
+        }
+
+        .sleep-timeline-wrapper {
+            height: 260px;
+        }
+
+        .sleep-timeline-wrapper canvas {
+            height: 100% !important;
+            width: 100% !important;
+        }
+
+        .sleep-stage-pill {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.35rem;
+            padding: 0.25rem 0.6rem;
+            border-radius: 999px;
+            background-color: #f8f9fa;
+        }
+
+        .sleep-stage-swatch {
+            width: 10px;
+            height: 10px;
+            border-radius: 999px;
+            display: inline-block;
+        }
+
+        .sleep-nav-group .btn {
+            min-width: 40px;
+        }
+    </style>
+
+    <div class="d-flex flex-wrap justify-content-between align-items-center gap-3 mb-4">
+        <div class="d-flex align-items-center gap-2 sleep-nav-group">
+            <a class="btn btn-outline-secondary@(Model.PreviousDate.HasValue ? string.Empty : " disabled")" href="@(Model.PreviousDate.HasValue ? previousUrl : "#")" role="button" aria-label="Previous night">&#x2039;</a>
+            <div class="btn btn-outline-secondary disabled">@selectedDateText</div>
+            <a class="btn btn-outline-secondary@(Model.NextDate.HasValue ? string.Empty : " disabled")" href="@(Model.NextDate.HasValue ? nextUrl : "#")" role="button" aria-label="Next night">&#x203A;</a>
+        </div>
+        <div class="btn-group" role="group" aria-label="Sleep view options">
+            <a class="btn btn-primary active" href="/Sleep">1 Day</a>
+            <a class="btn btn-outline-secondary" href="/Sleep/Trends">7 Days</a>
+            <a class="btn btn-outline-secondary" href="/Sleep/Trends">4 Weeks</a>
+            <a class="btn btn-outline-secondary" href="/Sleep/Trends">1 Year</a>
+        </div>
+    </div>
+
+    <div class="row g-3 mb-4">
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-body d-flex flex-column align-items-center">
+                    <div class="sleep-today-donut mb-3">
+                        <canvas id="sleepTodayDonut"></canvas>
+                        <div class="sleep-donut-center">
+                                <div class="value">@FormatDuration(entry.TotalSleepSeconds)</div>
+                            <div class="label">Total Sleep</div>
+                            @if (entry.SleepGoalSeconds.HasValue)
+                            {
+                                <div class="text-muted small">Goal @FormatDuration(entry.SleepGoalSeconds.Value)</div>
+                                <div class="text-muted small">@FormatGoalDelta(Model.GoalDeltaSeconds)</div>
+                            }
+                            else
+                            {
+                                <div class="text-muted small">Goal not set</div>
+                            }
+                        </div>
+                    </div>
+
+                    <div class="w-100 mt-2">
+                        <div class="row g-2 text-center">
+                            <div class="col-6">
+                                <div class="text-muted small">Deep</div>
+                                <div class="fw-semibold">@FormatDuration(entry.DeepSleepSeconds)</div>
+                            </div>
+                            <div class="col-6">
+                                <div class="text-muted small">Light</div>
+                                <div class="fw-semibold">@FormatDuration(entry.LightSleepSeconds)</div>
+                            </div>
+                            <div class="col-6">
+                                <div class="text-muted small">REM</div>
+                                <div class="fw-semibold">@FormatDuration(entry.RemSleepSeconds)</div>
+                            </div>
+                            <div class="col-6">
+                                <div class="text-muted small">Awake</div>
+                                <div class="fw-semibold">@FormatDuration(entry.AwakeSeconds)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="w-100 mt-3 text-center">
+                        <div class="text-muted small">Sleep Score</div>
+                        <div class="fs-4 fw-semibold">@FormatNullable(entry.SleepScore, "0")</div>
+                        @if (!string.IsNullOrWhiteSpace(Model.QualityLabel))
+                        {
+                            <div class="text-muted small">Quality: @Model.QualityLabel</div>
+                        }
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="card h-100">
+                <div class="card-body d-flex flex-column">
+                    <div class="d-flex justify-content-between align-items-center mb-2">
+                        <div>
+                            <div class="text-muted small">Bed Time</div>
+                            <div class="fw-semibold">@FormatTime(entry.SleepStartLocal)</div>
+                        </div>
+                        <div>
+                            <div class="text-muted small">Wake Time</div>
+                            <div class="fw-semibold">@FormatTime(entry.SleepEndLocal)</div>
+                        </div>
+                    </div>
+
+                    <div class="sleep-timeline-wrapper mb-3 position-relative">
+                        <canvas id="sleepTimelineChart"></canvas>
+                    </div>
+
+                    <div class="d-flex flex-wrap gap-2 small text-muted mb-3">
+                        @foreach (var slice in Model.StageSlices)
+                        {
+                            <div class="sleep-stage-pill">
+                                <span class="sleep-stage-swatch" style="background-color: @slice.Color"></span>
+                                <span>@slice.Label</span>
+                                <span class="fw-semibold">@FormatDuration(slice.Seconds)</span>
+                            </div>
+                        }
+                    </div>
+
+                    <div class="btn-group" role="group" aria-label="Timeline options">
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-overlay="movement">Movement</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-overlay="resting">Resting HR</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" data-overlay="bodyBattery">Body Battery</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <div class="row g-3">
+        <div class="col-lg-4">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h6 class="text-uppercase text-muted small">Notes</h6>
+                    <textarea class="form-control" rows="5" placeholder="Add notes" disabled></textarea>
+                    <div class="small text-muted mt-2">Notes syncing not supported.</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="col-lg-8">
+            <div class="card h-100">
+                <div class="card-body">
+                    <h6 class="text-uppercase text-muted small mb-3">Sleep Timeline Metrics</h6>
+                    <div class="row g-3 text-center">
+                        <div class="col-6 col-md-3">
+                            <div class="text-muted small">Resting HR</div>
+                            <div class="fw-semibold">
+                                @if (entry.RestingHeartRate.HasValue)
+                                {
+                                    @($"{entry.RestingHeartRate.Value:0} bpm")
+                                }
+                                else
+                                {
+                                    @("--")
+                                }
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="text-muted small">Body Battery Change</div>
+                            <div class="fw-semibold">@FormatNullable(entry.BodyBatteryChange, "0")</div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="text-muted small">Respiration</div>
+                            <div class="fw-semibold">
+                                @if (entry.AverageRespirationValue.HasValue)
+                                {
+                                    @($"{entry.AverageRespirationValue.Value:0.0} br/min")
+                                }
+                                else
+                                {
+                                    @("--")
+                                }
+                            </div>
+                        </div>
+                        <div class="col-6 col-md-3">
+                            <div class="text-muted small">Lowest SpO2</div>
+                            <div class="fw-semibold">
+                                @if (entry.LowestSpO2Value.HasValue)
+                                {
+                                    @($"{entry.LowestSpO2Value.Value:0}%")
+                                }
+                                else
+                                {
+                                    @("--")
+                                }
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script id="sleepTodayData" type="application/json">@Html.Raw(detailJson)</script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script>
+        (() => {
+            const dataElement = document.getElementById('sleepTodayData');
+            if (!dataElement) {
+                return;
+            }
+
+            let payload;
+            try {
+                payload = JSON.parse(dataElement.textContent || 'null');
+            } catch (error) {
+                console.warn('Unable to parse sleep detail payload', error);
+                return;
+            }
+
+            if (!payload) {
+                return;
+            }
+
+            const slices = Array.isArray(payload.stageSlices)
+                ? payload.stageSlices.filter(slice => (slice?.seconds ?? 0) > 0)
+                : [];
+
+                if (slices.length) {
+                    const donutCtx = document.getElementById('sleepTodayDonut');
+                    if (donutCtx) {
+                        new Chart(donutCtx, {
+                            type: 'doughnut',
+                            data: {
+                                labels: slices.map(slice => slice.label),
+                                datasets: [{
+                                    data: slices.map(slice => toHours(slice.seconds)),
+                                    backgroundColor: slices.map(slice => slice.color),
+                                    borderWidth: 0,
+                                    hoverOffset: 6
+                                }]
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                cutout: '70%',
+                                plugins: {
+                                    legend: { display: false },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: context => {
+                                                const stage = context.label || '';
+                                                const seconds = (context.parsed ?? 0) * 3600;
+                                                return `${stage}: ${formatDuration(seconds)}`;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+                    }
+
+                    const timelineCtx = document.getElementById('sleepTimelineChart');
+                    if (timelineCtx && Array.isArray(payload.timeline) && payload.timeline.length) {
+                        const stageDatasets = buildStageDatasets(payload.timeline);
+                        const overlayState = createOverlayState();
+
+                        const timelineChart = new Chart(timelineCtx, {
+                            type: 'bar',
+                            data: {
+                                labels: ['Sleep'],
+                                datasets: stageDatasets
+                            },
+                            options: {
+                                responsive: true,
+                                maintainAspectRatio: false,
+                                scales: {
+                                    x: {
+                                        type: 'time',
+                                        stacked: true,
+                                        time: {
+                                            displayFormats: { minute: 'h:mm a' },
+                                            tooltipFormat: 'MMM d, h:mm a'
+                                        },
+                                        ticks: {
+                                            autoSkip: true,
+                                            maxTicksLimit: 6
+                                        }
+                                    },
+                                    y: {
+                                        type: 'category',
+                                        labels: ['Sleep'],
+                                        stacked: true,
+                                        ticks: { display: false },
+                                        grid: { display: false }
+                                    },
+                                    overlay: {
+                                        position: 'right',
+                                        display: false,
+                                        grid: { display: false },
+                                        ticks: {
+                                            callback: value => value
+                                        }
+                                    }
+                                },
+                                plugins: {
+                                    legend: { display: false },
+                                    tooltip: {
+                                        callbacks: {
+                                            label: context => {
+                                                const raw = context.raw;
+                                                const stage = context.dataset.label || 'Sleep';
+                                                if (!raw || !Array.isArray(raw.x)) {
+                                                    return stage;
+                                                }
+
+                                                const [startValue, endValue] = raw.x;
+                                                const durationSeconds = diffInSeconds(startValue, endValue);
+                                                const rangeText = `${formatClock(startValue)} – ${formatClock(endValue)}`;
+                                                return `${stage}: ${rangeText} (${formatDuration(durationSeconds)})`;
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        });
+
+                        setupOverlayButtons(timelineChart, overlayState, payload);
+                    }
+            }
+
+            function buildStageDatasets(timeline) {
+                return timeline.map(segment => ({
+                    type: 'bar',
+                    label: segment.stage,
+                    role: 'stage',
+                    data: [{ x: [segment.start, segment.end], y: 'Sleep' }],
+                    parsing: { xAxisKey: 'x', yAxisKey: 'y' },
+                    backgroundColor: segment.color,
+                    borderSkipped: false,
+                    categoryPercentage: 1,
+                    barPercentage: 1,
+                    stack: 'sleep'
+                }));
+            }
+
+            function createOverlayState() {
+                return {
+                    movement: false,
+                    resting: false,
+                    bodyBattery: false
+                };
+            }
+
+            function setupOverlayButtons(chart, overlayState, payload) {
+                const buttons = document.querySelectorAll('[data-overlay]');
+                buttons.forEach(button => {
+                    button.addEventListener('click', () => {
+                        const key = button.dataset.overlay;
+                        if (!key) {
+                            return;
+                        }
+
+                        const hasSamples = Array.isArray(payload[key]) && payload[key].length;
+                        if (!hasSamples) {
+                            button.classList.remove('active');
+                            return;
+                        }
+
+                        overlayState[key] = !overlayState[key];
+                        button.classList.toggle('active', overlayState[key]);
+
+                        updateOverlayDatasets(chart, overlayState, payload);
+                    });
+
+                    if (!(Array.isArray(payload[button.dataset.overlay]) && payload[button.dataset.overlay].length)) {
+                        button.classList.add('disabled');
+                        button.setAttribute('disabled', 'disabled');
+                    }
+                });
+            }
+
+            function updateOverlayDatasets(chart, overlayState, payload) {
+                const overlayDatasets = [];
+
+                if (overlayState.movement && Array.isArray(payload.movement) && payload.movement.length) {
+                    overlayDatasets.push(createLineDataset('Movement', payload.movement, '#10b981'));
+                }
+
+                if (overlayState.resting && Array.isArray(payload.resting) && payload.resting.length) {
+                    overlayDatasets.push(createLineDataset('Resting HR', payload.resting, '#0ea5e9'));
+                }
+
+                if (overlayState.bodyBattery && Array.isArray(payload.bodyBattery) && payload.bodyBattery.length) {
+                    overlayDatasets.push(createLineDataset('Body Battery', payload.bodyBattery, '#f97316'));
+                }
+
+                const baseDatasets = chart.data.datasets.filter(ds => ds.role === 'stage');
+                chart.data.datasets = [...baseDatasets, ...overlayDatasets];
+
+                chart.options.scales.overlay.display = overlayDatasets.length > 0;
+                chart.update();
+            }
+
+            function createLineDataset(label, samples, color) {
+                return {
+                    type: 'line',
+                    label,
+                    role: 'overlay',
+                    data: samples.map(sample => ({ x: sample.timestamp, y: sample.value })),
+                    borderColor: color,
+                    backgroundColor: color,
+                    borderWidth: 2,
+                    tension: 0.3,
+                    pointRadius: 0,
+                    yAxisID: 'overlay'
+                };
+            }
+
+            function toHours(seconds) {
+                return Math.round((seconds / 3600) * 100) / 100;
+            }
+
+            function formatDuration(seconds) {
+                if (typeof seconds !== 'number' || Number.isNaN(seconds)) {
+                    return '';
+                }
+
+                const total = Math.max(0, Math.round(seconds));
+                const hours = Math.floor(total / 3600);
+                const minutes = Math.floor((total % 3600) / 60);
+                return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
+            }
+
+            function diffInSeconds(start, end) {
+                const startDate = toDate(start);
+                const endDate = toDate(end);
+                if (!startDate || !endDate) {
+                    return NaN;
+                }
+                return (endDate.getTime() - startDate.getTime()) / 1000;
+            }
+
+            function formatClock(value) {
+                const date = toDate(value);
+                if (!date) {
+                    return '--';
+                }
+                return date.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' });
+            }
+
+            function toDate(value) {
+                if (value == null) {
+                    return null;
+                }
+                const date = new Date(value);
+                return Number.isNaN(date.getTime()) ? null : date;
+            }
+        })();
+    </script>
+}
+
+@functions {
+    private static string FormatDuration(double seconds)
+    {
+        var ts = TimeSpan.FromSeconds(Math.Max(0, seconds));
+        return ts.TotalHours >= 10 ? ts.ToString("hh\\:mm") : ts.ToString("h\\:mm");
+    }
+
+    private static string FormatTime(DateTime? timestamp)
+    {
+        return timestamp.HasValue ? timestamp.Value.ToString("h:mm tt") : "--";
+    }
+
+    private static string FormatNullable(double? value, string format)
+    {
+        return value.HasValue ? value.Value.ToString(format) : "--";
+    }
+
+    private static string FormatGoalDelta(double? seconds)
+    {
+        if (!seconds.HasValue)
+        {
+            return "--";
+        }
+
+        var direction = seconds >= 0 ? "above goal" : "below goal";
+        var span = TimeSpan.FromSeconds(Math.Abs(seconds.Value));
+        var parts = new System.Collections.Generic.List<string>();
+        if (span.Hours > 0)
+        {
+            parts.Add($"{span.Hours}h");
+        }
+        parts.Add($"{span.Minutes:D2}m");
+        return string.Join(' ', parts) + $" {direction}";
+    }
+}

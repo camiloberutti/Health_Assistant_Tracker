@@ -10,6 +10,7 @@ namespace GarminTempApi.Data
         public DbSet<Activity> Activities { get; set; }
         public DbSet<ActivityPoint> ActivityPoints { get; set; }
         public DbSet<SleepSummary> SleepSummaries { get; set; }
+        public DbSet<SleepDetailSnapshot> SleepDetailSnapshots { get; set; }
         public DbSet<StepSummary> StepSummaries { get; set; }
         public DbSet<ActivityDetailSnapshot> ActivityDetailSnapshots { get; set; }
 
@@ -43,6 +44,10 @@ namespace GarminTempApi.Data
                 .WithOne(a => a.DetailSnapshot)
                 .HasForeignKey<ActivityDetailSnapshot>(d => d.ActivityId)
                 .OnDelete(DeleteBehavior.Cascade);
+
+            modelBuilder.Entity<SleepDetailSnapshot>()
+                .HasIndex(s => s.Date)
+                .IsUnique();
         }
     }
 }

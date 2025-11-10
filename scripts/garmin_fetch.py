@@ -16,7 +16,7 @@ import json
 import sys
 import zipfile
 import xml.etree.ElementTree as ET
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import Any, Dict, Iterable, List, Optional
 
 from garminconnect import Garmin  # type: ignore
@@ -69,6 +69,44 @@ def _ensure_date_window(start_date: Optional[date], end_date: Optional[date]) ->
 def _date_range(start: date, end: date) -> Iterable[date]:
     for offset in range((end - start).days + 1):
         yield start + timedelta(days=offset)
+
+
+def _millis_to_iso(value: Optional[Any]) -> Optional[str]:
+    if value is None:
+        return None
+    try:
+        millis = int(value)
+    except (TypeError, ValueError):
+        return None
+
+    # Treat the timestamp as Unix epoch milliseconds; Garmin supplies UTC and local variants.
+    return datetime.fromtimestamp(millis / 1000, tz=timezone.utc).isoformat().replace("+00:00", "Z")
+
+
+def _normalise_gmt_timestamp(raw: Optional[str]) -> Optional[str]:
+    if not raw:
+        return None
+
+    candidate = raw.replace(" ", "T")
+    # Garmin sometimes returns fractional seconds suffixed with .0. Remove trailing .0 for isoformat.
+    if candidate.endswith(".0"):
+        candidate = candidate[:-2]
+
+    try:
+        parsed = datetime.fromisoformat(candidate)
+    except ValueError:
+        # Fallback without fractional seconds
+        try:
+            parsed = datetime.strptime(candidate, "%Y-%m-%dT%H:%M:%S")
+        except ValueError:
+            return None
+
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    else:
+        parsed = parsed.astimezone(timezone.utc)
+
+    return parsed.isoformat().replace("+00:00", "Z")
 
 
 def _safe_float(value: Any) -> Optional[float]:
@@ -253,6 +291,14 @@ def main(argv: Optional[List[str]] = None) -> int:
         step_payload = []
 
     sleep_payload: List[Dict[str, Any]] = []
+    sleep_detail_payload: List[Dict[str, Any]] = []
+
+    activity_level_stage = {
+        0: "Deep",
+        1: "Light",
+        2: "REM",
+        3: "Awake",
+    }
     for day in _date_range(start_date, end_date):
         try:
             raw = client.get_sleep_data(day.isoformat()) or {}
@@ -264,6 +310,62 @@ def main(argv: Optional[List[str]] = None) -> int:
         if not summary:
             continue
 
+        detail_levels: List[Dict[str, Any]] = []
+        for segment in raw.get("sleepLevels") or []:
+            activity_level = segment.get("activityLevel")
+            try:
+                stage_key = int(float(activity_level)
+                                ) if activity_level is not None else None
+            except (TypeError, ValueError):
+                stage_key = None
+
+            stage = activity_level_stage.get(
+                stage_key) if stage_key is not None else None
+            start_utc = _normalise_gmt_timestamp(segment.get("startGMT"))
+            end_utc = _normalise_gmt_timestamp(segment.get("endGMT"))
+
+            if stage and start_utc and end_utc:
+                detail_levels.append({
+                    "stage": stage,
+                    "startUtc": start_utc,
+                    "endUtc": end_utc,
+                })
+
+        def _collect_sample(series: Iterable[Dict[str, Any]], *, start_key: str, value_key: str) -> List[Dict[str, Any]]:
+            samples: List[Dict[str, Any]] = []
+            for item in series:
+                start_value = item.get(start_key)
+                value = _safe_float(item.get(value_key))
+                if value is None:
+                    continue
+
+                timestamp = (
+                    _millis_to_iso(start_value)
+                    if isinstance(start_value, (int, float, str)) and str(start_value).isdigit()
+                    else _normalise_gmt_timestamp(start_value)
+                )
+                if timestamp:
+                    samples.append({
+                        "timestampUtc": timestamp,
+                        "value": value,
+                    })
+            return samples
+
+        movement_samples: List[Dict[str, Any]] = []
+        for segment in raw.get("sleepMovement") or []:
+            timestamp = _normalise_gmt_timestamp(segment.get("startGMT"))
+            value = _safe_float(segment.get("activityLevel"))
+            if timestamp is not None and value is not None:
+                movement_samples.append({
+                    "timestampUtc": timestamp,
+                    "value": value,
+                })
+
+        heart_rate_samples = _collect_sample(
+            raw.get("sleepHeartRate") or [], start_key="startGMT", value_key="value")
+        body_battery_samples = _collect_sample(
+            raw.get("sleepBodyBattery") or [], start_key="startGMT", value_key="value")
+
         sleep_payload.append(
             {
                 "date": summary.get("calendarDate") or day.isoformat(),
@@ -274,8 +376,28 @@ def main(argv: Optional[List[str]] = None) -> int:
                 "awakeSleepSeconds": summary.get("awakeSleepSeconds"),
                 "sleepScore": summary.get("overallSleepScore"),
                 "sleepQualityType": summary.get("sleepQualityType"),
+                "sleepStartLocal": _millis_to_iso(summary.get("sleepStartTimestampLocal")),
+                "sleepEndLocal": _millis_to_iso(summary.get("sleepEndTimestampLocal")),
+                "sleepStartGmt": _millis_to_iso(summary.get("sleepStartTimestampGMT")),
+                "sleepEndGmt": _millis_to_iso(summary.get("sleepEndTimestampGMT")),
+                "sleepRestingHeartRate": summary.get("sleepRestingHeartRate"),
+                "bodyBatteryChange": summary.get("bodyBatteryChange"),
+                "averageRespirationValue": summary.get("averageRespirationValue"),
+                "lowestSpO2Value": summary.get("lowestSpO2Value"),
+                "sleepTimeGoalSeconds": summary.get("sleepTimeGoalSeconds"),
             }
         )
+
+        detail_entry = {
+            "date": summary.get("calendarDate") or day.isoformat(),
+            "levels": detail_levels,
+            "movement": movement_samples,
+            "heartRate": heart_rate_samples,
+            "bodyBattery": body_battery_samples,
+        }
+
+        if any(detail_entry[key] for key in ("levels", "movement", "heartRate", "bodyBattery")):
+            sleep_detail_payload.append(detail_entry)
 
     payload = {
         "window": {
@@ -285,6 +407,7 @@ def main(argv: Optional[List[str]] = None) -> int:
         "activities": activity_payload,
         "steps": step_payload,
         "sleep": sleep_payload,
+        "sleepDetails": sleep_detail_payload,
     }
 
     json.dump(payload, sys.stdout)

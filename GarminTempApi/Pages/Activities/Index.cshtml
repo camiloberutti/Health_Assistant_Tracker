@@ -12,14 +12,16 @@
 <link rel="stylesheet" href="https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css" />
 <link rel="stylesheet" href="https://cdn.datatables.net/responsive/2.5.0/css/responsive.bootstrap5.min.css" />
 
-<form method="get" class="row g-3 mb-4">
+<form id="activityFilters" method="get" class="row g-3 mb-3">
     <div class="col-md-3">
         <label class="form-label" for="filterStart">Start date</label>
-        <input id="filterStart" name="StartDate" value="@Model.StartDate?.ToString("yyyy-MM-dd")" class="form-control" type="date" />
+        <input id="filterStart" name="StartDate" value="@Model.StartDate?.ToString("yyyy-MM-dd")" class="form-control"
+            type="date" />
     </div>
     <div class="col-md-3">
         <label class="form-label" for="filterEnd">End date</label>
-        <input id="filterEnd" name="EndDate" value="@Model.EndDate?.ToString("yyyy-MM-dd")" class="form-control" type="date" />
+        <input id="filterEnd" name="EndDate" value="@Model.EndDate?.ToString("yyyy-MM-dd")" class="form-control"
+            type="date" />
     </div>
     <div class="col-md-3">
         <label class="form-label" for="filterType">Activity type</label>
@@ -27,7 +29,8 @@
             <option value="">All types</option>
             @foreach (var type in Model.ActivityTypes)
             {
-                <option value="@type" @(string.Equals(Model.ActivityType, type, StringComparison.OrdinalIgnoreCase) ? "selected" : null)>@type</option>
+                <option value="@type" @(string.Equals(Model.ActivityType, type, StringComparison.OrdinalIgnoreCase) ?
+                                                      "selected" : null)>@type</option>
             }
         </select>
     </div>
@@ -37,16 +40,24 @@
     </div>
 </form>
 
+<div class="alert alert-light border rounded-3 mb-4">
+    <div class="d-flex flex-column flex-lg-row align-items-lg-center gap-2">
+        <span class="badge bg-primary-subtle text-primary-emphasis fw-semibold">Tip</span>
+        <span class="text-muted">Click any activity row to open the detailed view with route map and interactive
+            charts.</span>
+    </div>
+</div>
+
 <div class="table-responsive">
     <table id="activitiesTable" class="table table-striped table-hover align-middle" style="width:100%;">
         <thead>
             <tr>
-                <th>Start</th>
+                <th>Date</th>
                 <th>Name</th>
                 <th>Sport</th>
                 <th>Distance (km)</th>
                 <th>Duration</th>
-                <th>Source</th>
+                <th>Pace / Speed</th>
             </tr>
         </thead>
         <tbody></tbody>
@@ -73,7 +84,7 @@
                     data: 'startTime',
                     render: function (data) {
                         const date = new Date(data);
-                        return date.toLocaleString();
+                        return date.toLocaleDateString();
                     }
                 },
                 {
@@ -86,6 +97,9 @@
                 {
                     data: 'distanceMeters',
                     render: function (meters) {
+                        if (!meters || Number.isNaN(meters)) {
+                            return '0.00';
+                        }
                         return (meters / 1000).toFixed(2);
                     }
                 },
@@ -95,9 +109,50 @@
                         return value ?? '';
                     }
                 },
-                { data: 'source' }
+                {
+                    data: null,
+                    render: function (row) {
+                        return computeEffortMetric(row);
+                    }
+                }
             ]
         });
+
+        function computeEffortMetric(row) {
+            const sport = (row.sport || '').toLowerCase();
+            const distanceMeters = row.distanceMeters || 0;
+            const durationSeconds = row.durationSeconds || 0;
+
+            if (distanceMeters <= 0 || durationSeconds <= 0) {
+                return '–';
+            }
+
+            const distanceKm = distanceMeters / 1000;
+
+            const toPace = (secondsPerUnit, suffix) => {
+                const minutes = Math.floor(secondsPerUnit / 60);
+                const seconds = Math.round(secondsPerUnit % 60);
+                return `${minutes}:${seconds.toString().padStart(2, '0')} ${suffix}`;
+            };
+
+            if (sport.includes('run') || sport.includes('trail') || sport.includes('walk')) {
+                const secondsPerKm = durationSeconds / distanceKm;
+                return toPace(secondsPerKm, '/km');
+            }
+
+            if (sport.includes('swim')) {
+                const perHundredMeters = durationSeconds / (distanceMeters / 100);
+                return toPace(perHundredMeters, '/100m');
+            }
+
+            if (sport.includes('bike') || sport.includes('ride') || sport.includes('cycle')) {
+                const hours = durationSeconds / 3600;
+                const speed = hours > 0 ? distanceKm / hours : 0;
+                return `${speed.toFixed(1)} km/h`;
+            }
+
+            return '–';
+        }
 
         function applyFilters() {
             const startValue = $('#filterStart').val();

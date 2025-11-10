@@ -68,6 +68,7 @@ namespace GarminTempApi.Pages.Activities
                     StartTime = a.StartTime,
                     DistanceMeters = a.DistanceMeters,
                     Duration = a.Duration.ToString(@"hh\:mm\:ss"),
+                    DurationSeconds = a.Duration.TotalSeconds,
                     Sport = a.ActivityType,
                     Source = a.Source,
                 })
@@ -83,6 +84,7 @@ namespace GarminTempApi.Pages.Activities
             public string Duration { get; set; } = string.Empty;
             public string Sport { get; set; } = string.Empty;
             public string Source { get; set; } = string.Empty;
+            public double DurationSeconds { get; set; }
         }
     }
 }
