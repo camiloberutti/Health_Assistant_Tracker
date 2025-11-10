@@ -7,6 +7,7 @@ using System.Net.Http.Headers;
 using System.Threading;
 using System.Threading.Tasks;
 using GarminTempApi.Configuration;
+using GarminTempApi.Models;
 using GarminTempApi.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -45,6 +46,7 @@ builder.Services.AddScoped<GarminTempApi.Services.ActivityService>();
 builder.Services.AddScoped<GarminTempApi.Services.IActivityParser, GarminTempApi.Services.GpxTcxParser>();
 builder.Services.AddScoped<GarminTempApi.Services.FitActivityParser>();
 builder.Services.AddScoped<InsightDataBuilder>();
+builder.Services.AddScoped<DataStatusService>();
 
 builder.Services.AddOptions<OpenAiOptions>()
     .Bind(builder.Configuration.GetSection(OpenAiOptions.SectionName))
@@ -113,6 +115,19 @@ using (var scope = app.Services.CreateScope())
             LastUpdatedUtc TEXT NOT NULL
         );");
     EnsureSleepSummaryColumns(db.Database.GetDbConnection());
+
+    var importer = scope.ServiceProvider.GetRequiredService<GarminConnectImporter>();
+    var seededSteps = await EnsureSampleStepDataAsync(db, CancellationToken.None);
+    if (seededSteps > 0)
+    {
+        var loggerFactory = scope.ServiceProvider.GetRequiredService<ILoggerFactory>();
+        var logger = loggerFactory.CreateLogger("SampleDataSeeder");
+        logger.LogInformation(
+            importer.HasCredentials()
+                ? "Seeded {Count} sample step summaries. Real Garmin sync will replace them once it succeeds."
+                : "Seeded {Count} sample step summaries for demo mode.",
+            seededSteps);
+    }
 }
 
 if (syncOnce)
@@ -207,6 +222,51 @@ static void EnsureSleepSummaryColumns(DbConnection connection)
     {
         connection.Close();
     }
+}
+
+static async Task<int> EnsureSampleStepDataAsync(GarminTempApi.Data.AppDbContext db, CancellationToken cancellationToken)
+{
+    if (await db.StepSummaries.AnyAsync(cancellationToken))
+    {
+        return 0;
+    }
+
+    var today = DateTime.Today;
+    var start = today.AddDays(-119);
+    var random = new Random(4321);
+    var entries = new List<StepSummary>(capacity: 120);
+
+    for (var i = 0; i < 120; i++)
+    {
+        var date = start.AddDays(i).Date;
+        var seasonal = Math.Sin(i / 5.5d) * 1400d;
+        var fatigue = Math.Cos(i / 2.8d) * 500d;
+        var weekendBoost = date.DayOfWeek is DayOfWeek.Saturday or DayOfWeek.Sunday ? 900d : 0d;
+        var randomVariance = (random.NextDouble() - 0.5d) * 900d;
+
+        var baseGoal = 10000d + Math.Sin(i / 3d) * 600d;
+        var rawSteps = 9500d + seasonal + fatigue + weekendBoost + randomVariance;
+        rawSteps = Math.Clamp(rawSteps, 3800d, 16500d);
+
+        var goalSteps = Math.Clamp(baseGoal + (random.NextDouble() - 0.5d) * 500d, 7000d, 14000d);
+        var distanceMeters = Math.Round(rawSteps * 0.78d, 1);
+        var activeCalories = Math.Round(rawSteps * 0.045d, 0);
+        var totalCalories = Math.Round(1550d + activeCalories + (random.NextDouble() - 0.5d) * 120d, 0);
+
+        entries.Add(new StepSummary
+        {
+            Date = date,
+            TotalSteps = Math.Round(rawSteps, 0),
+            GoalSteps = Math.Round(goalSteps, 0),
+            TotalCalories = totalCalories,
+            ActiveCalories = activeCalories,
+            TotalDistanceMeters = distanceMeters
+        });
+    }
+
+    await db.StepSummaries.AddRangeAsync(entries, cancellationToken);
+    await db.SaveChangesAsync(cancellationToken);
+    return entries.Count;
 }
 
 static async Task RunSyncOnceAsync(IServiceProvider services, CancellationToken cancellationToken)

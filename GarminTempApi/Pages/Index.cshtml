@@ -1,6 +1,16 @@
 @page
+@model GarminTempApi.Pages.IndexModel
 @{
     Layout = "_Layout";
+    var status = Model.Status;
+    string FormatDate(DateTime? value)
+    {
+        return value is null ? "--" : value.Value.ToLocalTime().ToString("MMM d, yyyy");
+    }
+    string FormatDateTime(DateTime? value)
+    {
+        return value is null ? "--" : value.Value.ToLocalTime().ToString("MMM d, yyyy HH:mm");
+    }
 }
 
 <div class="py-5 text-center">
@@ -8,3 +18,59 @@
     <p class="lead">Quick access to your activities, sleep and steps. Use the nav to go to a page.</p>
     <p><a class="btn btn-primary" href="/Activities">View Activities</a></p>
 </div>
+
+@if (status is not null)
+{
+    <div class="row justify-content-center mb-5">
+        <div class="col-lg-8 col-xl-6">
+            <div class="card shadow-sm">
+                <div class="card-body">
+                    <div class="d-flex align-items-center justify-content-between mb-3">
+                        <h5 class="mb-0">Data Readiness</h5>
+                        <span class="badge @(status.IsReady ? "bg-success" : "bg-warning text-dark")">@(status.IsReady ? "Ready" : "Needs attention")</span>
+                    </div>
+
+                    <div class="form-check form-switch mb-3">
+                        <input class="form-check-input" type="checkbox" role="switch" id="data-ready-switch" disabled @(status.IsReady ? "checked" : null)>
+                        <label class="form-check-label fw-semibold" for="data-ready-switch">All datasets loaded</label>
+                    </div>
+
+                    <p class="text-muted small mb-4">
+                        @(status.IsReady
+                            ? "Activities, sleep, and steps are available."
+                            : $"Waiting on {(status.MissingComponents.Count == 0 ? "datasets" : string.Join(", ", status.MissingComponents))} to finish syncing.")
+                    </p>
+
+                    <div class="vstack gap-3">
+                        <div class="d-flex align-items-start gap-3">
+                            <input class="form-check-input mt-1" type="checkbox" id="activities-ready" disabled @(status.HasActivities ? "checked" : null)>
+                            <div>
+                                <label class="form-check-label fw-semibold" for="activities-ready">Activities</label>
+                                <div class="text-muted small">Entries: @status.ActivityCount.ToString("N0") &middot; Latest: @FormatDateTime(status.LatestActivityStart)</div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex align-items-start gap-3">
+                            <input class="form-check-input mt-1" type="checkbox" id="sleep-ready" disabled @(status.HasSleepSummaries ? "checked" : null)>
+                            <div>
+                                <label class="form-check-label fw-semibold" for="sleep-ready">Sleep summaries</label>
+                                <div class="text-muted small">Nights: @status.SleepSummaryCount.ToString("N0") &middot; Latest: @FormatDate(status.LatestSleepDate)</div>
+                                <div class="text-muted small">Detailed segments: @status.SleepDetailCount.ToString("N0")</div>
+                            </div>
+                        </div>
+
+                        <div class="d-flex align-items-start gap-3">
+                            <input class="form-check-input mt-1" type="checkbox" id="steps-ready" disabled @(status.HasStepSummaries ? "checked" : null)>
+                            <div>
+                                <label class="form-check-label fw-semibold" for="steps-ready">Step summaries</label>
+                                <div class="text-muted small">Days: @status.StepSummaryCount.ToString("N0") &middot; Latest: @FormatDate(status.LatestStepDate)</div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="text-muted small mt-4">Status generated @FormatDateTime(status.GeneratedUtc).</div>
+                </div>
+            </div>
+        </div>
+    </div>
+}
