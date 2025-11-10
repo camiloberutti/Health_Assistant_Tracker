@@ -38,6 +38,13 @@ using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<GarminTempApi.Data.AppDbContext>();
     db.Database.EnsureCreated();
+    db.Database.ExecuteSqlRaw(@"CREATE TABLE IF NOT EXISTS ActivityDetailSnapshots (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ActivityId INTEGER NOT NULL UNIQUE,
+            DetailJson TEXT NOT NULL,
+            LastUpdatedUtc TEXT NOT NULL,
+            FOREIGN KEY(ActivityId) REFERENCES Activities(Id) ON DELETE CASCADE
+        );");
 }
 
 // Configure the HTTP request pipeline.

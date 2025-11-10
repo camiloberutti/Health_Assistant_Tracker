@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.Text.Json;
+using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.Logging;
 
@@ -170,6 +172,23 @@ public class GarminConnectImporter
         return fallback;
     }
 
+    private static string? SerializeJsonElement(JsonElement element)
+    {
+        return element.ValueKind == JsonValueKind.Undefined || element.ValueKind == JsonValueKind.Null
+            ? null
+            : element.GetRawText();
+    }
+
+    private static DateTime? ParseDateTime(string? input)
+    {
+        if (string.IsNullOrWhiteSpace(input))
+        {
+            return null;
+        }
+
+        return DateTime.TryParse(input, out var parsed) ? parsed : null;
+    }
+
     private sealed record GarminFetchPayload
     {
         public GarminWindowDto? Window { get; init; }
@@ -202,6 +221,56 @@ public class GarminConnectImporter
         }
     }
 
+    private sealed record GarminActivityDetailDto
+    {
+        [JsonPropertyName("summary")]
+        public JsonElement Summary { get; init; }
+        [JsonPropertyName("details")]
+        public JsonElement Details { get; init; }
+        [JsonPropertyName("splitSummaries")]
+        public JsonElement SplitSummaries { get; init; }
+        [JsonPropertyName("splits")]
+        public JsonElement Splits { get; init; }
+        [JsonPropertyName("typedSplits")]
+        public JsonElement TypedSplits { get; init; }
+        [JsonPropertyName("weather")]
+        public JsonElement Weather { get; init; }
+        [JsonPropertyName("heartRateZones")]
+        public JsonElement HeartRateZones { get; init; }
+        [JsonPropertyName("gear")]
+        public JsonElement Gear { get; init; }
+        [JsonPropertyName("exerciseSets")]
+        public JsonElement ExerciseSets { get; init; }
+        [JsonPropertyName("trackPoints")]
+        public List<GarminTrackPointDto>? TrackPoints { get; init; }
+        [JsonPropertyName("errors")]
+        public Dictionary<string, string>? Errors { get; init; }
+        [JsonPropertyName("fetchedAtUtc")]
+        public string? FetchedAtUtc { get; init; }
+    }
+
+    private sealed record GarminTrackPointDto
+    {
+        public string? Timestamp { get; init; }
+        public double? Latitude { get; init; }
+        public double? Longitude { get; init; }
+        public double? Altitude { get; init; }
+        public double? HeartRate { get; init; }
+
+        public GarminTrackPoint? ToTrackPoint()
+        {
+            var timestamp = ParseDateTime(Timestamp);
+            var hasCoordinates = Latitude.HasValue && Longitude.HasValue;
+
+            if (!hasCoordinates && timestamp is null && !Altitude.HasValue && !HeartRate.HasValue)
+            {
+                return null;
+            }
+
+            return new GarminTrackPoint(timestamp, Latitude, Longitude, Altitude, HeartRate);
+        }
+    }
+
     private sealed record GarminConnectActivityDto
     {
         public string? ActivityId { get; init; }
@@ -210,6 +279,8 @@ public class GarminConnectImporter
         public double? DistanceMeters { get; init; }
         public double? DurationSeconds { get; init; }
         public string? ActivityType { get; init; }
+        [JsonPropertyName("detail")]
+        public GarminActivityDetailDto? Detail { get; init; }
 
         public GarminConnectActivity? ToActivity()
         {
@@ -218,13 +289,33 @@ public class GarminConnectImporter
                 return null;
             }
 
-            DateTime? startTime = null;
-            if (!string.IsNullOrWhiteSpace(StartTime))
+            var startTime = ParseDateTime(StartTime);
+
+            GarminActivityDetail? detail = null;
+            if (Detail is not null)
             {
-                if (DateTime.TryParse(StartTime, out var parsed))
-                {
-                    startTime = parsed;
-                }
+                var trackPoints = Detail.TrackPoints is not null
+                    ? Detail.TrackPoints
+                        .Select(tp => tp.ToTrackPoint())
+                        .Where(tp => tp is not null)
+                        .Select(tp => tp!)
+                        .ToList()
+                    : new List<GarminTrackPoint>();
+
+                detail = new GarminActivityDetail(
+                    SerializeJsonElement(Detail.Summary),
+                    SerializeJsonElement(Detail.Details),
+                    SerializeJsonElement(Detail.SplitSummaries),
+                    SerializeJsonElement(Detail.Splits),
+                    SerializeJsonElement(Detail.TypedSplits),
+                    SerializeJsonElement(Detail.Weather),
+                    SerializeJsonElement(Detail.HeartRateZones),
+                    SerializeJsonElement(Detail.Gear),
+                    SerializeJsonElement(Detail.ExerciseSets),
+                    trackPoints,
+                    Detail.Errors ?? new Dictionary<string, string>(),
+                    ParseDateTime(Detail.FetchedAtUtc)
+                );
             }
 
             return new GarminConnectActivity(
@@ -233,7 +324,8 @@ public class GarminConnectImporter
                 startTime,
                 DistanceMeters,
                 DurationSeconds,
-                ActivityType ?? string.Empty
+                ActivityType ?? string.Empty,
+                detail
             );
         }
     }
@@ -303,7 +395,31 @@ public record GarminConnectActivity(
     DateTime? StartTime,
     double? DistanceMeters,
     double? DurationSeconds,
-    string ActivityType
+    string ActivityType,
+    GarminActivityDetail? Detail
+);
+
+public record GarminTrackPoint(
+    DateTime? Timestamp,
+    double? Latitude,
+    double? Longitude,
+    double? Altitude,
+    double? HeartRate
+);
+
+public record GarminActivityDetail(
+    string? SummaryJson,
+    string? DetailsJson,
+    string? SplitSummariesJson,
+    string? SplitsJson,
+    string? TypedSplitsJson,
+    string? WeatherJson,
+    string? HeartRateZonesJson,
+    string? GearJson,
+    string? ExerciseSetsJson,
+    IReadOnlyList<GarminTrackPoint> TrackPoints,
+    IReadOnlyDictionary<string, string> Errors,
+    DateTime? FetchedAtUtc
 );
 
 public record GarminSleepEntry(

@@ -24,18 +24,18 @@ else
             </tr>
         </thead>
         <tbody>
-        @foreach (var item in Model.Items)
-        {
-            var distanceKm = item.TotalDistanceMeters / 1000.0;
-            <tr>
-                <td>@item.Date.ToString("yyyy-MM-dd")</td>
-                <td>@item.TotalSteps.ToString("0")</td>
-                <td>@item.GoalSteps.ToString("0")</td>
-                <td>@distanceKm.ToString("0.00")</td>
-                <td>@item.ActiveCalories.ToString("0")</td>
-                <td>@item.TotalCalories.ToString("0")</td>
-            </tr>
-        }
+            @foreach (var item in Model.Items)
+            {
+                var distanceKm = item.TotalDistanceMeters / 1000.0;
+                <tr>
+                    <td>@item.Date.ToString("yyyy-MM-dd")</td>
+                    <td>@item.TotalSteps.ToString("0")</td>
+                    <td>@item.GoalSteps.ToString("0")</td>
+                    <td>@distanceKm.ToString("0.00")</td>
+                    <td>@item.ActiveCalories.ToString("0")</td>
+                    <td>@item.TotalCalories.ToString("0")</td>
+                </tr>
+            }
         </tbody>
     </table>
 }

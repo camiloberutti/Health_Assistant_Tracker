@@ -45,9 +45,12 @@ docker-compose.override.yml
 # Local database files
 *.sqlite
 *.db
+*.db-shm
+*.db-wal
 
 # Secrets
 *.env
+latest-fetch.json
 
 # JetBrains Rider
 .idea/
