@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using System.Diagnostics;
+using System.Globalization;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using Microsoft.Extensions.Configuration;
@@ -39,7 +40,10 @@ public class GarminConnectImporter
         return null;
     }
 
-    public async Task<GarminConnectFetchResult> FetchActivitiesAsync(CancellationToken cancellationToken = default)
+    public async Task<GarminConnectFetchResult> FetchActivitiesAsync(
+        DateOnly? overrideStartDate = null,
+        DateOnly? overrideEndDate = null,
+        CancellationToken cancellationToken = default)
     {
         var (username, password) = GetCredentials();
         if (string.IsNullOrWhiteSpace(username) || string.IsNullOrWhiteSpace(password))
@@ -59,8 +63,12 @@ public class GarminConnectImporter
             pythonExecutable = OperatingSystem.IsWindows() ? "python" : "python3";
         }
 
-        var startDate = GetConfigValue("StartDate") ?? Environment.GetEnvironmentVariable("GARMIN_START_DATE");
-        var endDate = GetConfigValue("EndDate") ?? Environment.GetEnvironmentVariable("GARMIN_END_DATE");
+        var startDate = overrideStartDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+            ?? GetConfigValue("StartDate")
+            ?? Environment.GetEnvironmentVariable("GARMIN_START_DATE");
+        var endDate = overrideEndDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
+            ?? GetConfigValue("EndDate")
+            ?? Environment.GetEnvironmentVariable("GARMIN_END_DATE");
         var maxCountValue = GetConfigValue("MaxCount") ?? Environment.GetEnvironmentVariable("GARMIN_MAX_ACTIVITIES");
         var stepsOnly = ShouldFetchStepsOnly();
 

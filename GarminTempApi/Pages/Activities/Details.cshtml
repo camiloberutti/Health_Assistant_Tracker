@@ -9,8 +9,7 @@
     var trackPointCount = Model.TrackPoints.Count;
 }
 
-<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
-    integrity="sha384-ZZ1xkZs8AjtKoa6HgMHqmpYyqn1nVbWcv16O3MHuvb6jVWeItPxX2VINqb0BoBP5" crossorigin="" />
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
 
 <style>
     .activity-meta {
@@ -109,14 +108,7 @@
     </div>
 }
 
-@if (trackPointCount == 0)
-{
-    <div class="alert alert-secondary">
-        No track points are stored for this activity yet. Trigger a full Garmin sync or upload the original file to unlock
-        the map and charts.
-    </div>
-}
-else
+@if (trackPointCount > 0)
 {
     <div class="card shadow-sm mb-4 map-card">
         <div class="card-header d-flex justify-content-between align-items-center">
@@ -125,48 +117,46 @@ else
         </div>
         <div class="card-body p-0">
             <div id="activityMap"></div>
-            <p id="mapEmptyState" class="chart-empty text-muted small px-3 py-3 mb-0">No GPS coordinates available for this
-                activity.</p>
-        </div>
-    </div>
-
-    <div class="row g-4 mb-4">
-        <div class="col-12 col-lg-4">
-            <div class="card shadow-sm visual-card h-100">
-                <div class="card-header fw-semibold">Heart Rate</div>
-                <div class="card-body">
-                    <div class="chart-wrapper">
-                        <canvas id="chartHeartRate"></canvas>
-                    </div>
-                    <p id="heartEmptyState" class="chart-empty text-muted small mb-0">No heart rate samples available.</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-lg-4">
-            <div class="card shadow-sm visual-card h-100">
-                <div class="card-header fw-semibold">Elevation Profile</div>
-                <div class="card-body">
-                    <div class="chart-wrapper">
-                        <canvas id="chartAltitude"></canvas>
-                    </div>
-                    <p id="altitudeEmptyState" class="chart-empty text-muted small mb-0">No altitude readings available.</p>
-                </div>
-            </div>
-        </div>
-        <div class="col-12 col-lg-4">
-            <div class="card shadow-sm visual-card h-100">
-                <div class="card-header fw-semibold">Average Pace</div>
-                <div class="card-body">
-                    <div class="chart-wrapper">
-                        <canvas id="chartPace"></canvas>
-                    </div>
-                    <p id="paceEmptyState" class="chart-empty text-muted small mb-0">Insufficient distance data to calculate
-                        pace.</p>
-                </div>
-            </div>
         </div>
     </div>
 }
+
+<div class="row g-4 mb-4">
+    <div class="col-12 col-lg-4">
+        <div class="card shadow-sm visual-card h-100">
+            <div class="card-header fw-semibold">Heart Rate</div>
+            <div class="card-body">
+                <div class="chart-wrapper">
+                    <canvas id="chartHeartRate"></canvas>
+                </div>
+                <p id="heartEmptyState" class="chart-empty text-muted small mb-0">No heart rate samples available.</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-lg-4">
+        <div class="card shadow-sm visual-card h-100">
+            <div class="card-header fw-semibold">Elevation Profile</div>
+            <div class="card-body">
+                <div class="chart-wrapper">
+                    <canvas id="chartAltitude"></canvas>
+                </div>
+                <p id="altitudeEmptyState" class="chart-empty text-muted small mb-0">No altitude readings available.</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-lg-4">
+        <div class="card shadow-sm visual-card h-100">
+            <div class="card-header fw-semibold">Average Pace</div>
+            <div class="card-body">
+                <div class="chart-wrapper">
+                    <canvas id="chartPace"></canvas>
+                </div>
+                <p id="paceEmptyState" class="chart-empty text-muted small mb-0">Insufficient distance data to calculate
+                    pace.</p>
+            </div>
+        </div>
+    </div>
+</div>
 
 @if (Model.JsonBlocks.Count > 0)
 {
@@ -180,8 +170,7 @@ else
     }
 }
 
-<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
-    integrity="sha384-EdYikZ6irMIXja+6JGZve56kNjEcNWef39/C4R2tQeM+c/2yZfybp/BPZt6bYp0v" crossorigin=""></script>
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
 <script>
     (function () {
@@ -194,12 +183,19 @@ else
                         altitude = p.Altitude
             }), serializerOptions));
 
+        const mapElement = document.getElementById('activityMap');
+        const mapCard = mapElement ? mapElement.closest('.map-card') : null;
+
+        const activateEmptyStates = () => {
+            ['chartHeartRate', 'chartAltitude', 'chartPace'].forEach(id => document.getElementById(id)?.classList.add('d-none'));
+            ['heartEmptyState', 'altitudeEmptyState', 'paceEmptyState'].forEach(id => document.getElementById(id)?.classList.add('active'));
+        };
+
         if (!Array.isArray(trackPoints) || trackPoints.length === 0) {
+            mapCard?.classList.add('d-none');
+            activateEmptyStates();
             return;
         }
-
-        const mapElement = document.getElementById('activityMap');
-        const mapEmptyState = document.getElementById('mapEmptyState');
 
         const toDate = (input) => input ? new Date(input) : null;
         const isNumber = (value) => typeof value === 'number' && !Number.isNaN(value);
@@ -216,9 +212,8 @@ else
             .sort((a, b) => a.timestamp.getTime() - b.timestamp.getTime());
 
         if (normalized.length === 0) {
-            mapElement?.classList.add('d-none');
-            mapEmptyState?.classList.add('active');
-            ['heartEmptyState', 'altitudeEmptyState', 'paceEmptyState'].forEach(id => document.getElementById(id)?.classList.add('active'));
+            mapCard?.classList.add('d-none');
+            activateEmptyStates();
             return;
         }
 
@@ -266,25 +261,46 @@ else
         const coordinatePoints = enriched.filter(p => isNumber(p.latitude) && isNumber(p.longitude));
         if (mapElement && typeof L !== 'undefined') {
             if (coordinatePoints.length === 0) {
-                mapElement.classList.add('d-none');
-                mapEmptyState?.classList.add('active');
+                mapCard?.classList.add('d-none');
             } else {
-                mapElement.classList.remove('d-none');
-                mapEmptyState?.classList.remove('active');
+                mapCard?.classList.remove('d-none');
                 const map = L.map(mapElement, { scrollWheelZoom: false });
                 L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
                     attribution: '&copy; OpenStreetMap contributors'
                 }).addTo(map);
 
-                const latLngs = coordinatePoints.map(p => [p.latitude, p.longitude]);
-                const polyline = L.polyline(latLngs, { color: '#0d6efd', weight: 4, opacity: 0.85 }).addTo(map);
+                const start = coordinatePoints[0];
+                let routeLayer = null;
 
-                L.circleMarker(latLngs[0], { color: '#198754', radius: 6 }).addTo(map).bindPopup('Start');
-                L.circleMarker(latLngs[latLngs.length - 1], { color: '#dc3545', radius: 6 }).addTo(map).bindPopup('Finish');
+                if (coordinatePoints.length > 1) {
+                    const latLngs = coordinatePoints.map(p => [p.latitude, p.longitude]);
+                    routeLayer = L.polyline(latLngs, { color: '#38bdf8', weight: 6, opacity: 0.95 }).addTo(map);
+                }
 
-                map.fitBounds(polyline.getBounds(), { padding: [25, 25] });
-                setTimeout(() => map.invalidateSize(), 150);
+                L.circleMarker([start.latitude, start.longitude], { color: '#198754', radius: 6 })
+                    .addTo(map)
+                    .bindPopup('Start');
+
+                if (coordinatePoints.length > 1) {
+                    const finish = coordinatePoints[coordinatePoints.length - 1];
+                    L.circleMarker([finish.latitude, finish.longitude], { color: '#dc3545', radius: 6 })
+                        .addTo(map)
+                        .bindPopup('Finish');
+                }
+
+                if (routeLayer) {
+                    const bounds = routeLayer.getBounds();
+                    if (bounds.isValid()) {
+                        map.fitBounds(bounds, { padding: [25, 25] });
+                    }
+                } else {
+                    map.setView([start.latitude, start.longitude], 15);
+                }
+
+                map.whenReady(() => setTimeout(() => map.invalidateSize(), 150));
             }
+        } else if (mapCard) {
+            mapCard.classList.add('d-none');
         }
 
         if (typeof Chart === 'undefined') {

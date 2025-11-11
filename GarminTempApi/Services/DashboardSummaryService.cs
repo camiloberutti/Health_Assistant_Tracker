@@ -22,7 +22,10 @@ public sealed record DashboardCard(
     string AccentCss,
     IReadOnlyList<DashboardCardStat> Stats);
 
-public sealed record DashboardSummary(IReadOnlyList<DashboardCard> Cards, DateTime GeneratedUtc);
+public sealed record DashboardSummary(
+    IReadOnlyList<DashboardCard> Cards,
+    DateTime GeneratedUtc,
+    DateOnly? LatestDataDate);
 
 public class DashboardSummaryService
 {
@@ -38,22 +41,39 @@ public class DashboardSummaryService
     public async Task<DashboardSummary> GetSummaryAsync(CancellationToken cancellationToken = default)
     {
         var cards = new List<DashboardCard>();
+        var latestDates = new List<DateOnly>();
 
         try
         {
-            await BuildStepsCardAsync(cards, cancellationToken);
-            await BuildSleepCardAsync(cards, cancellationToken);
-            await BuildActivityCardAsync(cards, cancellationToken);
+            var stepsDate = await BuildStepsCardAsync(cards, cancellationToken);
+            if (stepsDate is DateOnly stepLatest)
+            {
+                latestDates.Add(stepLatest);
+            }
+
+            var sleepDate = await BuildSleepCardAsync(cards, cancellationToken);
+            if (sleepDate is DateOnly sleepLatest)
+            {
+                latestDates.Add(sleepLatest);
+            }
+
+            var activityDate = await BuildActivityCardAsync(cards, cancellationToken);
+            if (activityDate is DateOnly activityLatest)
+            {
+                latestDates.Add(activityLatest);
+            }
         }
         catch (Exception ex)
         {
             _logger.LogError(ex, "Failed to build dashboard summary.");
         }
 
-        return new DashboardSummary(cards, DateTime.UtcNow);
+        var latestDate = latestDates.Count == 0 ? (DateOnly?)null : latestDates.Max();
+
+        return new DashboardSummary(cards, DateTime.UtcNow, latestDate);
     }
 
-    private async Task BuildStepsCardAsync(ICollection<DashboardCard> cards, CancellationToken cancellationToken)
+    private async Task<DateOnly?> BuildStepsCardAsync(ICollection<DashboardCard> cards, CancellationToken cancellationToken)
     {
         var latest = await _dbContext.StepSummaries
             .OrderByDescending(s => s.Date)
@@ -68,7 +88,7 @@ public class DashboardSummaryService
 
         if (latest is null)
         {
-            return;
+            return null;
         }
 
         var weekStart = latest.Date.AddDays(-6);
@@ -104,9 +124,11 @@ public class DashboardSummaryService
             IconCss: "bi-shoe-prints",
             AccentCss: "accent-steps",
             Stats: stats));
+
+        return DateOnly.FromDateTime(latest.Date);
     }
 
-    private async Task BuildSleepCardAsync(ICollection<DashboardCard> cards, CancellationToken cancellationToken)
+    private async Task<DateOnly?> BuildSleepCardAsync(ICollection<DashboardCard> cards, CancellationToken cancellationToken)
     {
         var latest = await _dbContext.SleepSummaries
             .OrderByDescending(s => s.Date)
@@ -124,7 +146,7 @@ public class DashboardSummaryService
 
         if (latest is null)
         {
-            return;
+            return null;
         }
 
         var totalSleep = TimeSpan.FromSeconds(latest.TotalSleepSeconds);
@@ -162,9 +184,11 @@ public class DashboardSummaryService
             IconCss: "bi-moon-stars",
             AccentCss: "accent-sleep",
             Stats: stats));
+
+        return DateOnly.FromDateTime(latest.Date);
     }
 
-    private async Task BuildActivityCardAsync(ICollection<DashboardCard> cards, CancellationToken cancellationToken)
+    private async Task<DateOnly?> BuildActivityCardAsync(ICollection<DashboardCard> cards, CancellationToken cancellationToken)
     {
         var latest = await _dbContext.Activities
             .OrderByDescending(a => a.StartTime)
@@ -179,7 +203,7 @@ public class DashboardSummaryService
 
         if (latest is null)
         {
-            return;
+            return null;
         }
 
         var since = DateTime.UtcNow.AddDays(-6);
@@ -211,6 +235,19 @@ public class DashboardSummaryService
             IconCss: "bi-activity",
             AccentCss: "accent-activity",
             Stats: stats));
+
+        var latestLocal = latest.StartTime;
+
+        if (latestLocal.Kind == DateTimeKind.Utc)
+        {
+            latestLocal = latestLocal.ToLocalTime();
+        }
+        else if (latestLocal.Kind == DateTimeKind.Unspecified)
+        {
+            latestLocal = DateTime.SpecifyKind(latestLocal, DateTimeKind.Local);
+        }
+
+        return DateOnly.FromDateTime(latestLocal);
     }
 
     private static string BuildPrimaryActivityValue(double distanceMeters, TimeSpan duration)

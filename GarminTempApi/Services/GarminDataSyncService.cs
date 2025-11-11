@@ -1,3 +1,5 @@
+using System;
+using System.Collections.Generic;
 using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
@@ -11,6 +13,8 @@ namespace GarminTempApi.Services;
 
 public class GarminDataSyncService
 {
+    private const int IncrementalWindowDays = 5;
+
     private static readonly JsonSerializerOptions DetailJsonOptions = new(JsonSerializerDefaults.Web)
     {
         DefaultIgnoreCondition = JsonIgnoreCondition.WhenWritingNull,
@@ -35,10 +39,25 @@ public class GarminDataSyncService
             throw new InvalidOperationException("Garmin credentials are not configured.");
         }
 
-        var fetchResult = await _importer.FetchActivitiesAsync(cancellationToken);
-
         using var scope = _scopeFactory.CreateScope();
         var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
+
+        var incrementalStart = await DetermineIncrementalStartDateAsync(db, cancellationToken);
+        DateOnly? incrementalEnd = null;
+
+        if (incrementalStart is not null)
+        {
+            incrementalEnd = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+
+            if (incrementalStart > incrementalEnd)
+            {
+                incrementalStart = incrementalEnd;
+            }
+
+            _logger.LogInformation("Running incremental Garmin sync from {StartDate} through {EndDate}.", incrementalStart, incrementalEnd);
+        }
+
+        var fetchResult = await _importer.FetchActivitiesAsync(incrementalStart, incrementalEnd, cancellationToken);
 
         var detailLookup = fetchResult.Activities
             .Where(a => !string.IsNullOrWhiteSpace(a.ActivityId) && a.Detail is not null)
@@ -296,6 +315,54 @@ public class GarminDataSyncService
             sleepUpserted,
             stepUpserted,
             fetchResult);
+    }
+
+    private static async Task<DateOnly?> DetermineIncrementalStartDateAsync(AppDbContext db, CancellationToken cancellationToken)
+    {
+        var candidates = new List<DateOnly>();
+
+        var latestActivity = await db.Activities
+            .OrderByDescending(a => a.StartTime)
+            .Select(a => (DateTime?)a.StartTime)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (latestActivity.HasValue)
+        {
+            candidates.Add(DateOnly.FromDateTime(latestActivity.Value));
+        }
+
+        var latestSleep = await db.SleepSummaries
+            .OrderByDescending(s => s.Date)
+            .Select(s => (DateTime?)s.Date)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (latestSleep.HasValue)
+        {
+            candidates.Add(DateOnly.FromDateTime(latestSleep.Value));
+        }
+
+        var latestSteps = await db.StepSummaries
+            .OrderByDescending(s => s.Date)
+            .Select(s => (DateTime?)s.Date)
+            .FirstOrDefaultAsync(cancellationToken);
+        if (latestSteps.HasValue)
+        {
+            candidates.Add(DateOnly.FromDateTime(latestSteps.Value));
+        }
+
+        if (candidates.Count == 0)
+        {
+            return null;
+        }
+
+        var latest = candidates.Max();
+        var windowStart = latest.AddDays(1 - IncrementalWindowDays);
+
+        var today = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+        if (windowStart > today)
+        {
+            windowStart = today;
+        }
+
+        return windowStart;
     }
 
     private static IEnumerable<ActivityPoint> BuildTrackPointsForNewActivity(Activity activity, IReadOnlyList<GarminTrackPoint> trackPoints)

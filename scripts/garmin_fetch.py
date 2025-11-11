@@ -211,6 +211,28 @@ def _collect_activity_detail(client: "Garmin", activity_id: str) -> Dict[str, An
     return detail
 
 
+def _build_step_entry(source: Dict[str, Any], iso_date: str) -> Dict[str, Any]:
+    """Extract step summary fields from a Garmin payload."""
+
+    if not isinstance(source, dict):
+        return {}
+
+    def pick(*keys: str) -> Optional[Any]:
+        for key in keys:
+            if key in source and source[key] is not None:
+                return source[key]
+        return None
+
+    return {
+        "date": pick("calendarDate", "date") or iso_date,
+        "totalSteps": pick("totalSteps", "steps", "value"),
+        "goal": pick("dailyStepGoal", "goal", "stepGoal"),
+        "totalCalories": pick("totalKilocalories", "totalCalories"),
+        "activeCalories": pick("activeKilocalories", "activeCalories"),
+        "totalDistanceMeters": pick("totalDistanceMeters", "totalDistance", "distanceMeters"),
+    }
+
+
 def main(argv: Optional[List[str]] = None) -> int:
     parser = argparse.ArgumentParser(
         description="Fetch Garmin metrics as JSON")
@@ -279,26 +301,65 @@ def main(argv: Optional[List[str]] = None) -> int:
             )
 
     step_payload: List[Dict[str, Any]] = []
+    step_range_lookup: Dict[str, Dict[str, Any]] = {}
+
+    try:
+        range_steps = client.get_daily_steps(
+            start_date.isoformat(), end_date.isoformat()
+        ) or []
+    except Exception:
+        range_steps = []
+
+    if isinstance(range_steps, list):
+        for item in range_steps:
+            if isinstance(item, dict):
+                key = item.get("calendarDate") or item.get("date")
+                if key:
+                    step_range_lookup[key] = item
+
     for day in _date_range(start_date, end_date):
         iso_date = day.isoformat()
+
         try:
             stats = client.get_stats_and_body(iso_date) or {}
         except Exception:
-            continue
+            stats = {}
 
-        if not isinstance(stats, dict) or not stats:
-            continue
+        entry = _build_step_entry(stats, iso_date)
 
-        step_payload.append(
-            {
-                "date": stats.get("calendarDate") or iso_date,
-                "totalSteps": stats.get("totalSteps"),
-                "goal": stats.get("dailyStepGoal"),
-                "totalCalories": stats.get("totalKilocalories"),
-                "activeCalories": stats.get("activeKilocalories"),
-                "totalDistanceMeters": stats.get("totalDistanceMeters"),
-            }
-        )
+        if not entry.get("totalSteps"):
+            fallback = _build_step_entry(
+                step_range_lookup.get(iso_date, {}), iso_date)
+            for key, value in fallback.items():
+                if entry.get(key) in (None, 0) and value not in (None, 0):
+                    entry[key] = value
+
+        if not entry.get("totalSteps"):
+            try:
+                chart = client.get_steps_data(iso_date)
+            except Exception:
+                chart = []
+
+            if isinstance(chart, list):
+                aggregate = {
+                    "calendarDate": iso_date,
+                    "totalSteps": sum(
+                        _safe_float(point.get("steps")) or 0 for point in chart
+                        if isinstance(point, dict)
+                    ),
+                    "totalDistanceMeters": sum(
+                        _safe_float(point.get("distanceMeters")) or 0 for point in chart
+                        if isinstance(point, dict)
+                    ),
+                }
+
+                aggregate_entry = _build_step_entry(aggregate, iso_date)
+                for key, value in aggregate_entry.items():
+                    if entry.get(key) in (None, 0) and value not in (None, 0):
+                        entry[key] = value
+
+        if any(value not in (None, 0) for key, value in entry.items() if key != "date"):
+            step_payload.append(entry)
 
     sleep_payload: List[Dict[str, Any]] = []
     sleep_detail_payload: List[Dict[str, Any]] = []

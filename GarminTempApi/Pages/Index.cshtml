@@ -1,6 +1,7 @@
 @page
 @model GarminTempApi.Pages.IndexModel
 @using GarminTempApi.Services
+@using System.Globalization
 @{
     Layout = "_Layout";
     var status = Model.Status;
@@ -11,6 +12,16 @@
     string FormatDateTime(DateTime? value)
     {
         return value is null ? "--" : value.Value.ToLocalTime().ToString("MMM d, yyyy HH:mm");
+    }
+    string FormatDateOnly(DateOnly? value)
+    {
+        if (value is null)
+        {
+            return "--";
+        }
+
+        var asDateTime = value.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
+        return asDateTime.ToString("dddd, MMM d", CultureInfo.CurrentCulture);
     }
 }
 
@@ -23,6 +34,16 @@
 @if (Model.Summary?.Cards?.Count > 0)
 {
     <section class="mb-5">
+        <div class="d-flex align-items-baseline justify-content-between mb-3 flex-wrap gap-2">
+            <h2 class="h4 mb-0">Daily Highlights</h2>
+            <div class="text-muted small d-flex flex-wrap gap-2">
+                @if (Model.Summary.LatestDataDate is not null)
+                {
+                    <span>Data through @FormatDateOnly(Model.Summary.LatestDataDate)</span>
+                }
+                <span>Updated @FormatDateTime(Model.Summary.GeneratedUtc)</span>
+            </div>
+        </div>
         <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
             @foreach (var card in Model.Summary.Cards)
             {

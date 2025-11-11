@@ -1,5 +1,27 @@
 @{
     var title = "App Garmin";
+    var currentPath = Context?.Request?.Path.Value ?? "/";
+    currentPath = currentPath.TrimEnd('/');
+    if (string.IsNullOrEmpty(currentPath))
+    {
+        currentPath = "/";
+    }
+
+    bool IsActive(string url)
+    {
+        if (string.IsNullOrWhiteSpace(url))
+        {
+            return false;
+        }
+
+        var target = url.TrimEnd('/');
+        if (string.IsNullOrEmpty(target))
+        {
+            target = "/";
+        }
+
+        return string.Equals(currentPath, target, System.StringComparison.OrdinalIgnoreCase);
+    }
 }
 <!DOCTYPE html>
 <html lang="en">
@@ -11,36 +33,235 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
     <style>
+        :root {
+            --sidebar-width: 268px;
+            --sidebar-bg-start: #152238;
+            --sidebar-bg-end: #0d1625;
+        }
+
+        html,
         body {
-            padding-top: 56px;
+            height: 100%;
+        }
+
+        body {
+            margin: 0;
+            background: #f5f6fb;
+        }
+
+        .app-shell {
+            min-height: 100vh;
+        }
+
+        .sidebar {
+            width: var(--sidebar-width);
+            background: linear-gradient(180deg, var(--sidebar-bg-start) 0%, var(--sidebar-bg-end) 100%);
+            box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.05), 6px 0 24px rgba(15, 23, 42, 0.24);
+            color: #eef2ff;
+        }
+
+        .sidebar-header {
+            padding: 1.1rem 1.35rem 0.9rem;
+        }
+
+        .sidebar-header small {
+            color: rgba(238, 242, 255, 0.6);
+            font-size: 0.8rem;
+            letter-spacing: 0.04em;
+        }
+
+        .sidebar-nav {
+            padding: 0 1.1rem 1.5rem;
+        }
+
+        .sidebar-nav .nav-link {
+            display: flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: rgba(238, 242, 255, 0.72);
+            border-radius: 0.75rem;
+            padding: 0.65rem 0.85rem;
+            font-weight: 500;
+            transition: background-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+        }
+
+        .sidebar-nav .nav-link i {
+            font-size: 1.15rem;
+        }
+
+        .sidebar-nav .nav-link.active {
+            background: rgba(88, 140, 255, 0.25);
+            color: #ffffff;
+            box-shadow: 0 6px 18px rgba(88, 140, 255, 0.25);
+        }
+
+        .sidebar-nav .nav-link:hover {
+            background: rgba(255, 255, 255, 0.15);
+            color: #ffffff;
+            transform: translateX(4px);
+        }
+
+        .sidebar-footer {
+            padding: 1rem 1.35rem 1.35rem;
+            border-top: 1px solid rgba(255, 255, 255, 0.08);
+            color: rgba(238, 242, 255, 0.65);
+            font-size: 0.85rem;
+        }
+
+        .app-main {
+            background: transparent;
+        }
+
+        .app-content {
+            max-width: 1100px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+
+        .mobile-header {
+            background: linear-gradient(90deg, var(--sidebar-bg-start) 0%, var(--sidebar-bg-end) 100%);
+        }
+
+        @@media (max-width: 992px) {
+            .sidebar {
+                position: fixed;
+                inset: 0;
+                z-index: 1045;
+                transform: translateX(-100%);
+                transition: transform 0.22s ease-in-out;
+                max-width: 320px;
+            }
+
+            .sidebar.show {
+                transform: translateX(0);
+            }
+
+            .sidebar-backdrop {
+                position: fixed;
+                inset: 0;
+                background: rgba(15, 23, 42, 0.55);
+                z-index: 1040;
+            }
+
+            .app-main {
+                padding-top: 4rem;
+            }
+
+            .app-content {
+                padding-left: 1.25rem;
+                padding-right: 1.25rem;
+            }
         }
     </style>
 </head>
 
 <body>
-    <nav class="navbar navbar-expand-md navbar-dark bg-dark fixed-top">
-        <div class="container-fluid">
-            <a class="navbar-brand" href="/">App Garmin</a>
-            <button class="navbar-toggler" type="button" data-bs-toggle="collapse" data-bs-target="#nav"
-                aria-controls="nav" aria-expanded="false" aria-label="Toggle navigation">
-                <span class="navbar-toggler-icon"></span>
-            </button>
-            <div class="collapse navbar-collapse" id="nav">
-                <ul class="navbar-nav me-auto mb-2 mb-md-0">
-                    <li class="nav-item"><a class="nav-link" href="/Activities">Activities</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/Sleep">Sleep</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/Steps">Steps</a></li>
-                    <li class="nav-item"><a class="nav-link" href="/Insights">Insights</a></li>
-                </ul>
+    <div class="app-shell d-flex">
+        <div class="sidebar-backdrop d-lg-none d-none" id="sidebar-backdrop"></div>
+        <aside class="sidebar text-white d-flex flex-column" id="sidebar">
+            <div class="sidebar-header d-flex justify-content-between align-items-center">
+                <a class="text-white text-decoration-none fw-semibold d-flex align-items-center gap-2" href="/">
+                    <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-primary bg-opacity-25 text-primary" style="width: 2.25rem; height: 2.25rem;">
+                        <i class="bi bi-compass"></i>
+                    </span>
+                    <span class="d-flex flex-column">
+                        <span>App Garmin</span>
+                        <small>Training overview</small>
+                    </span>
+                </a>
+                <button class="btn btn-outline-light btn-sm d-lg-none" type="button" data-bs-toggle="sidebar" aria-label="Close menu">
+                    <i class="bi bi-x-lg"></i>
+                </button>
             </div>
-        </div>
-    </nav>
 
-    <main class="container">
-        @RenderBody()
-    </main>
+            <nav class="sidebar-nav flex-grow-1">
+                <ul class="nav flex-column gap-1">
+                    <li class="nav-item">
+                        <a class="nav-link @(IsActive("/") ? "active" : null)" href="/">
+                            <i class="bi bi-speedometer2"></i>
+                            <span>Dashboard</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link @(IsActive("/Activities") ? "active" : null)" href="/Activities">
+                            <i class="bi bi-activity"></i>
+                            <span>Activities</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link @(IsActive("/Sleep") ? "active" : null)" href="/Sleep">
+                            <i class="bi bi-moon-stars"></i>
+                            <span>Sleep</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link @(IsActive("/Steps") ? "active" : null)" href="/Steps">
+                            <i class="bi bi-shoe-prints"></i>
+                            <span>Steps</span>
+                        </a>
+                    </li>
+                    <li class="nav-item">
+                        <a class="nav-link @(IsActive("/Insights") ? "active" : null)" href="/Insights">
+                            <i class="bi bi-lightbulb"></i>
+                            <span>Insights</span>
+                        </a>
+                    </li>
+                </ul>
+            </nav>
+
+            <div class="sidebar-footer">
+                <div class="d-flex flex-column gap-1">
+                    <span class="fw-semibold">Stay synced</span>
+                    <span>Latest Garmin data appears here as soon as it lands.</span>
+                </div>
+                <button class="btn btn-outline-light btn-sm w-100 mt-3 d-lg-none" type="button" data-bs-toggle="sidebar">
+                    Close menu
+                </button>
+            </div>
+        </aside>
+
+        <div class="app-main flex-grow-1">
+            <header class="mobile-header d-lg-none p-3 text-white d-flex align-items-center justify-content-between">
+                <span class="fw-semibold">App Garmin</span>
+                <button class="btn btn-outline-light btn-sm" type="button" data-bs-toggle="sidebar">
+                    <i class="bi bi-list"></i>
+                </button>
+            </header>
+            <main class="app-content container-fluid py-4">
+                @RenderBody()
+            </main>
+        </div>
+    </div>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        (() => {
+            const sidebar = document.getElementById('sidebar');
+            const backdrop = document.getElementById('sidebar-backdrop');
+            if (!sidebar || !backdrop) {
+                return;
+            }
+
+            const toggleSidebar = (show) => {
+                const isShown = sidebar.classList.contains('show');
+                const shouldShow = typeof show === 'boolean' ? show : !isShown;
+                sidebar.classList.toggle('show', shouldShow);
+                backdrop.classList.toggle('d-none', !shouldShow);
+            };
+
+            backdrop.addEventListener('click', () => toggleSidebar(false));
+
+            document.querySelectorAll('[data-bs-toggle="sidebar"]').forEach(btn => {
+                btn.addEventListener('click', () => toggleSidebar());
+            });
+
+            window.addEventListener('resize', () => {
+                if (window.innerWidth >= 992) {
+                    toggleSidebar(false);
+                }
+            });
+        })();
+    </script>
     @RenderSection("Scripts", required: false)
 </body>
 

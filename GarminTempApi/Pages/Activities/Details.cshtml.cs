@@ -57,7 +57,6 @@ public class DetailsModel : PageModel
             .AsNoTracking()
             .Where(p => p.ActivityId == Activity.ActivityDbId)
             .OrderBy(p => p.Timestamp)
-            .Take(500)
             .ToListAsync();
 
         var detailJson = await _db.ActivityDetailSnapshots
