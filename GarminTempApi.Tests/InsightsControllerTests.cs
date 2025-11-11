@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using GarminTempApi.Controllers;
@@ -16,7 +17,7 @@ public class InsightsControllerTests
     {
         var controller = new InsightsController(new StubInsightService(), NullLogger<InsightsController>.Instance);
 
-        var result = await controller.QueryAsync(new InsightsController.QueryRequest(string.Empty, null), CancellationToken.None);
+        var result = await controller.QueryAsync(new InsightsController.QueryRequest(null, null, null), CancellationToken.None);
 
         var badRequest = Assert.IsType<BadRequestObjectResult>(result);
         Assert.Contains("Prompt", badRequest.Value!.ToString(), StringComparison.OrdinalIgnoreCase);
@@ -31,7 +32,11 @@ public class InsightsControllerTests
         };
 
         var controller = new InsightsController(stub, NullLogger<InsightsController>.Instance);
-        var result = await controller.QueryAsync(new InsightsController.QueryRequest("How was my sleep?", null), CancellationToken.None);
+        var messages = new List<InsightsController.ChatMessageDto>
+        {
+            new("user", "How was my sleep?")
+        };
+        var result = await controller.QueryAsync(new InsightsController.QueryRequest(null, messages, null), CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result);
         Assert.Contains("insight", ok.Value!.ToString(), StringComparison.OrdinalIgnoreCase);
@@ -70,7 +75,7 @@ public class InsightsControllerTests
     private sealed class StubInsightService : IOpenAiInsightService
     {
         public Func<DateTime, CancellationToken, Task<string>>? DailyHandler { get; set; }
-        public Func<string, CancellationToken, Task<string>>? QueryHandler { get; set; }
+        public Func<IReadOnlyList<InsightChatMessage>, CancellationToken, Task<string>>? QueryHandler { get; set; }
 
         public Task<string> GenerateDailyRecommendationAsync(DateTime targetDate, CancellationToken cancellationToken)
         {
@@ -82,14 +87,14 @@ public class InsightsControllerTests
             return DailyHandler(targetDate, cancellationToken);
         }
 
-        public Task<string> RunChatQueryAsync(string prompt, CancellationToken cancellationToken)
+        public Task<string> RunChatQueryAsync(IReadOnlyList<InsightChatMessage> messages, CancellationToken cancellationToken)
         {
             if (QueryHandler is null)
             {
                 return Task.FromResult("reply");
             }
 
-            return QueryHandler(prompt, cancellationToken);
+            return QueryHandler(messages, cancellationToken);
         }
     }
 }

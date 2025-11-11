@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Globalization;
 using System.Linq;
 using System.Net.Http;
@@ -68,35 +69,92 @@ public class OpenAiInsightService : IOpenAiInsightService
         userContent.AppendLine("Context:");
         userContent.AppendLine(JsonSerializer.Serialize(payload, SerializerOptions));
 
-        return await SendChatCompletionAsync(options, userContent.ToString(), cancellationToken);
+        var messages = new List<object>
+        {
+            BuildMessage("system", DefaultSystemPrompt),
+            BuildMessage("user", userContent.ToString())
+        };
+
+        return await SendChatCompletionAsync(options, messages, cancellationToken);
     }
 
-    public async Task<string> RunChatQueryAsync(string prompt, CancellationToken cancellationToken)
+    public async Task<string> RunChatQueryAsync(IReadOnlyList<InsightChatMessage> messages, CancellationToken cancellationToken)
     {
-        if (string.IsNullOrWhiteSpace(prompt))
+        if (messages is null)
         {
-            throw new ArgumentException("Prompt must not be empty.", nameof(prompt));
+            throw new ArgumentNullException(nameof(messages));
+        }
+
+        var sanitized = new List<(string Role, string Content)>(messages.Count);
+        foreach (var message in messages)
+        {
+            if (message is null)
+            {
+                continue;
+            }
+
+            var content = message.Content?.Trim();
+            if (string.IsNullOrWhiteSpace(content))
+            {
+                continue;
+            }
+
+            sanitized.Add((NormalizeRole(message.Role), content));
+        }
+
+        if (sanitized.Count == 0)
+        {
+            throw new ArgumentException("At least one chat message is required.", nameof(messages));
+        }
+
+        if (sanitized[^1].Role != "user")
+        {
+            throw new ArgumentException("The last chat message must come from the user.", nameof(messages));
         }
 
         var options = GetValidatedOptions();
         var today = DateTime.UtcNow.Date;
         var digest = await _dataBuilder.BuildUserDataDigestAsync(today.AddDays(-13), today, cancellationToken);
 
-        var payload = new
+        var contextPayload = new
         {
             type = "chat-query",
-            question = prompt,
             digest
         };
 
-        var userContent = new StringBuilder();
-        userContent.AppendLine("Answer the user's question using the available data.");
-        userContent.AppendLine("Be transparent if something is unknown and keep the answer under 180 words.");
-        userContent.AppendLine("Use markdown paragraphs or bullet points when appropriate.");
-        userContent.AppendLine("Context:");
-        userContent.AppendLine(JsonSerializer.Serialize(payload, SerializerOptions));
+        var conversation = new List<object>
+        {
+            BuildMessage("system", DefaultSystemPrompt),
+            BuildMessage("system", "Answer the user's question using the available data. Be transparent about gaps and keep replies under 180 words. Use markdown paragraphs or bullet points when helpful."),
+            BuildMessage("system", $"Context:\n{JsonSerializer.Serialize(contextPayload, SerializerOptions)}")
+        };
 
-        return await SendChatCompletionAsync(options, userContent.ToString(), cancellationToken);
+        foreach (var message in sanitized.TakeLast(20))
+        {
+            conversation.Add(BuildMessage(message.Role, message.Content));
+        }
+
+        return await SendChatCompletionAsync(options, conversation, cancellationToken);
+    }
+
+    private static object BuildMessage(string role, string content)
+    {
+        return new { role = NormalizeRole(role), content };
+    }
+
+    private static string NormalizeRole(string? role)
+    {
+        if (string.IsNullOrWhiteSpace(role))
+        {
+            return "user";
+        }
+
+        return role.Trim().ToLowerInvariant() switch
+        {
+            "assistant" => "assistant",
+            "system" => "system",
+            _ => "user"
+        };
     }
 
     private OpenAiOptions GetValidatedOptions()
@@ -194,8 +252,13 @@ public class OpenAiInsightService : IOpenAiInsightService
         return current == default ? fallback : current;
     }
 
-    private async Task<string> SendChatCompletionAsync(OpenAiOptions options, string userContent, CancellationToken cancellationToken)
+    private async Task<string> SendChatCompletionAsync(OpenAiOptions options, IReadOnlyList<object> messages, CancellationToken cancellationToken)
     {
+        if (messages is null || messages.Count == 0)
+        {
+            throw new ArgumentException("At least one message is required.", nameof(messages));
+        }
+
         var requestUri = ResolveEndpoint(options.BaseUrl);
         using var request = new HttpRequestMessage(HttpMethod.Post, requestUri);
 
@@ -206,11 +269,7 @@ public class OpenAiInsightService : IOpenAiInsightService
             model = options.Model,
             temperature = options.Temperature,
             max_tokens = options.MaxTokens,
-            messages = new object[]
-            {
-                new { role = "system", content = DefaultSystemPrompt },
-                new { role = "user", content = userContent }
-            }
+            messages
         };
 
         var content = JsonSerializer.Serialize(requestBody, SerializerOptions);

@@ -8,5 +8,5 @@ public interface IOpenAiInsightService
 {
     Task<string> GenerateDailyRecommendationAsync(DateTime targetDate, CancellationToken cancellationToken);
 
-    Task<string> RunChatQueryAsync(string prompt, CancellationToken cancellationToken);
+    Task<string> RunChatQueryAsync(IReadOnlyList<InsightChatMessage> messages, CancellationToken cancellationToken);
 }

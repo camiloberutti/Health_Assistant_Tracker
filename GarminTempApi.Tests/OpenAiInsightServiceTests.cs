@@ -98,7 +98,10 @@ public class OpenAiInsightServiceTests
         handler.ResponseContent =
             "{\"choices\":[{\"message\":{\"role\":\"assistant\",\"content\":\"Hello\"}}]}";
 
-        var result = await service.RunChatQueryAsync("How was my week?", CancellationToken.None);
+        var result = await service.RunChatQueryAsync(new[]
+        {
+            new InsightChatMessage("user", "How was my week?")
+        }, CancellationToken.None);
 
         Assert.Equal("Hello", result);
         Assert.NotNull(handler.LastRequest);
@@ -108,9 +111,16 @@ public class OpenAiInsightServiceTests
 
         using (var document = JsonDocument.Parse(handler.LastRequestBody))
         {
-            var userContent = document.RootElement.GetProperty("messages")[1].GetProperty("content").GetString();
-            Assert.NotNull(userContent);
-            Assert.Contains("\"type\":\"chat-query\"", userContent!);
+            var messages = document.RootElement.GetProperty("messages");
+            Assert.True(messages.GetArrayLength() >= 4);
+
+            var contextMessage = messages[2].GetProperty("content").GetString();
+            Assert.NotNull(contextMessage);
+            Assert.Contains("\"type\":\"chat-query\"", contextMessage!);
+
+            var userMessage = messages[messages.GetArrayLength() - 1];
+            Assert.Equal("user", userMessage.GetProperty("role").GetString());
+            Assert.Contains("How was my week?", userMessage.GetProperty("content").GetString()!);
         }
     }
 

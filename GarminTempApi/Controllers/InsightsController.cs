@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -23,8 +24,13 @@ namespace GarminTempApi.Controllers
             _logger = logger;
         }
 
+        public record ChatMessageDto(
+            [property: JsonPropertyName("role")] string? Role,
+            [property: JsonPropertyName("content")] string? Content);
+
         public record QueryRequest(
-            [property: JsonPropertyName("prompt")] string Prompt,
+            [property: JsonPropertyName("prompt")] string? Prompt,
+            [property: JsonPropertyName("messages")] IReadOnlyList<ChatMessageDto>? Messages,
             [property: JsonPropertyName("context")] JsonElement? Context);
 
         [HttpGet("daily")]
@@ -50,14 +56,44 @@ namespace GarminTempApi.Controllers
         [HttpPost("query")]
         public async Task<IActionResult> QueryAsync([FromBody] QueryRequest request, CancellationToken cancellationToken)
         {
-            if (request is null || string.IsNullOrWhiteSpace(request.Prompt))
+            if (request is null)
+            {
+                return BadRequest(new { error = "Prompt is required." });
+            }
+
+            var chatMessages = new List<InsightChatMessage>();
+            if (request.Messages is { Count: > 0 })
+            {
+                foreach (var message in request.Messages)
+                {
+                    if (message is null)
+                    {
+                        continue;
+                    }
+
+                    var content = message.Content?.Trim();
+                    if (string.IsNullOrWhiteSpace(content))
+                    {
+                        continue;
+                    }
+
+                    var role = string.IsNullOrWhiteSpace(message.Role) ? "user" : message.Role!;
+                    chatMessages.Add(new InsightChatMessage(role, content));
+                }
+            }
+            else if (!string.IsNullOrWhiteSpace(request.Prompt))
+            {
+                chatMessages.Add(new InsightChatMessage("user", request.Prompt.Trim()));
+            }
+
+            if (chatMessages.Count == 0)
             {
                 return BadRequest(new { error = "Prompt is required." });
             }
 
             try
             {
-                var reply = await _insightService.RunChatQueryAsync(request.Prompt, cancellationToken);
+                var reply = await _insightService.RunChatQueryAsync(chatMessages, cancellationToken);
                 return Ok(new { reply });
             }
             catch (ArgumentException ex)

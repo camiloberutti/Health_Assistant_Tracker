@@ -6,6 +6,59 @@
 
 <h2>Insights</h2>
 
+<style>
+    #chatHistory {
+        border: 1px solid #dee2e6;
+        border-radius: 0.75rem;
+        background-color: #f8f9fa;
+        padding: 1rem;
+        max-height: 320px;
+        overflow-y: auto;
+    }
+
+    .chat-message {
+        display: flex;
+        flex-direction: column;
+        margin-bottom: 1rem;
+    }
+
+    .chat-message:last-child {
+        margin-bottom: 0;
+    }
+
+    .chat-message.user {
+        align-items: flex-end;
+    }
+
+    .chat-message.assistant {
+        align-items: flex-start;
+    }
+
+    .chat-message .bubble {
+        padding: 0.75rem 1rem;
+        border-radius: 1rem;
+        max-width: 90%;
+        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+    }
+
+    .chat-message.user .bubble {
+        background-color: #0d6efd;
+        color: #ffffff;
+    }
+
+    .chat-message.assistant .bubble {
+        background-color: #ffffff;
+        color: #212529;
+        border: 1px solid #dee2e6;
+    }
+
+    .chat-message .timestamp {
+        font-size: 0.75rem;
+        color: #6c757d;
+        margin-top: 0.25rem;
+    }
+</style>
+
 <div class="card mb-4">
     <div class="card-body">
         <h5 class="card-title">Daily Recommendation</h5>
@@ -21,8 +74,8 @@
             placeholder="How was my training volume last week?"></textarea>
         <button id="sendBtn" class="btn btn-primary mt-3">Send</button>
         <div id="chatArea" class="mt-4">
-            <div id="chatStatus" class="text-muted">No questions yet.</div>
-            <div id="reply" class="mt-3"></div>
+            <div id="chatHistory" class="chat-history text-muted">No messages yet.</div>
+            <div id="chatStatus" class="text-muted small mt-2">Ready to chat.</div>
         </div>
     </div>
 </div>
@@ -30,8 +83,11 @@
 <script>
     const dailyEl = document.getElementById('dailyRecommendation');
     const promptEl = document.getElementById('prompt');
-    const replyEl = document.getElementById('reply');
+    const chatHistoryEl = document.getElementById('chatHistory');
     const statusEl = document.getElementById('chatStatus');
+    const sendBtn = document.getElementById('sendBtn');
+
+    const conversation = [];
 
     async function loadDailyRecommendation() {
         try {
@@ -49,20 +105,30 @@
     }
 
     async function submitPrompt() {
+        if (submitPrompt.pending) {
+            return;
+        }
+
         const prompt = promptEl.value.trim();
         if (!prompt) {
             statusEl.textContent = 'Please enter a question first.';
             return;
         }
 
-        statusEl.textContent = 'Thinking...';
-        replyEl.innerHTML = '';
+        submitPrompt.pending = true;
+        sendBtn.disabled = true;
+
+        const userMessage = addMessage('user', prompt);
+        statusEl.textContent = 'Assistant is thinking...';
+        promptEl.value = '';
 
         try {
             const response = await fetch('/api/insights/query', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ prompt })
+                body: JSON.stringify({
+                    messages: conversation.map(({ role, content }) => ({ role, content }))
+                })
             });
 
             if (!response.ok) {
@@ -71,15 +137,102 @@
             }
 
             const json = await response.json();
-            statusEl.textContent = 'Response';
-            replyEl.innerHTML = (json.reply || '').replace(/\n/g, '<br>');
+            const reply = (json.reply || '').trim();
+            if (reply) {
+                userMessage.pending = false;
+                addMessage('assistant', reply);
+                statusEl.textContent = 'Assistant replied.';
+            } else {
+                removeLastMessageIfPending(userMessage);
+                statusEl.textContent = 'Assistant returned an empty reply.';
+            }
         } catch (err) {
-            statusEl.textContent = 'Error';
-            replyEl.textContent = err.message;
+            removeLastMessageIfPending(userMessage);
+            promptEl.value = prompt;
+            statusEl.textContent = `Error: ${err.message}`;
+        }
+        submitPrompt.pending = false;
+        sendBtn.disabled = false;
+        promptEl.focus();
+    }
+
+    submitPrompt.pending = false;
+
+    function addMessage(role, content) {
+        const entry = {
+            role: role === 'assistant' ? 'assistant' : 'user',
+            content,
+            timestamp: new Date(),
+            pending: role === 'user'
+        };
+        conversation.push(entry);
+        renderConversation();
+        return entry;
+    }
+
+    function removeLastMessageIfPending(entry) {
+        if (!entry || !entry.pending) {
+            return;
+        }
+
+        const index = conversation.indexOf(entry);
+        if (index >= 0) {
+            conversation.splice(index, 1);
+            renderConversation();
         }
     }
 
-    document.getElementById('sendBtn').addEventListener('click', submitPrompt);
+    function renderConversation() {
+        if (conversation.length === 0) {
+            chatHistoryEl.innerHTML = '<div class="text-muted">No messages yet.</div>';
+            return;
+        }
+
+        const fragments = document.createDocumentFragment();
+        for (const message of conversation) {
+            const wrapper = document.createElement('div');
+            wrapper.className = `chat-message ${message.role}`;
+
+            const bubble = document.createElement('div');
+            bubble.className = 'bubble';
+            bubble.innerHTML = formatContent(message.content);
+            wrapper.appendChild(bubble);
+
+            const meta = document.createElement('div');
+            meta.className = 'timestamp';
+            meta.textContent = `${message.role === 'user' ? 'You' : 'Coach'} • ${formatTimestamp(message.timestamp)}`;
+            wrapper.appendChild(meta);
+            fragments.appendChild(wrapper);
+        }
+
+        chatHistoryEl.innerHTML = '';
+        chatHistoryEl.appendChild(fragments);
+        chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
+    }
+
+    function escapeHtml(value) {
+        return value.replace(/[&<>"']/g, (character) => ({
+            '&': '&amp;',
+            '<': '&lt;',
+            '>': '&gt;',
+            '"': '&quot;',
+            "'": '&#39;'
+        })[character]);
+    }
+
+    function formatContent(value) {
+        return escapeHtml(value).replace(/\n/g, '<br>');
+    }
+
+    function formatTimestamp(date) {
+        if (!(date instanceof Date)) {
+            return '';
+        }
+
+        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+    }
+
+    sendBtn.addEventListener('click', submitPrompt);
 
     promptEl.addEventListener('keydown', (ev) => {
         if (ev.ctrlKey && ev.key === 'Enter') {
