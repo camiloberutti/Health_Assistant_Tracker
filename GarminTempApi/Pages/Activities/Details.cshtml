@@ -187,11 +187,11 @@ else
     (function () {
         const trackPoints = @Html.Raw(JsonSerializer.Serialize(Model.TrackPoints.Select(p => new
             {
-                    timestamp = p.Timestamp,
-                    latitude = p.Latitude,
-                    longitude = p.Longitude,
-                    heartRate = p.HeartRate,
-                    altitude = p.Altitude
+                        timestamp = p.Timestamp,
+                        latitude = p.Latitude,
+                        longitude = p.Longitude,
+                        heartRate = p.HeartRate,
+                        altitude = p.Altitude
             }), serializerOptions));
 
         if (!Array.isArray(trackPoints) || trackPoints.length === 0) {

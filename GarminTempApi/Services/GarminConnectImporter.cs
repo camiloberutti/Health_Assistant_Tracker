@@ -62,6 +62,7 @@ public class GarminConnectImporter
         var startDate = GetConfigValue("StartDate") ?? Environment.GetEnvironmentVariable("GARMIN_START_DATE");
         var endDate = GetConfigValue("EndDate") ?? Environment.GetEnvironmentVariable("GARMIN_END_DATE");
         var maxCountValue = GetConfigValue("MaxCount") ?? Environment.GetEnvironmentVariable("GARMIN_MAX_ACTIVITIES");
+        var stepsOnly = ShouldFetchStepsOnly();
 
         var psi = new ProcessStartInfo
         {
@@ -93,6 +94,12 @@ public class GarminConnectImporter
         {
             psi.ArgumentList.Add("--max-count");
             psi.ArgumentList.Add(maxCountValue);
+        }
+
+        if (stepsOnly)
+        {
+            psi.ArgumentList.Add("--steps-only");
+            _logger.LogInformation("Garmin fetch configured for steps-only mode.");
         }
 
         _logger.LogInformation("Running Garmin Connect fetch script {ScriptPath}...", scriptPath);
@@ -163,6 +170,19 @@ public class GarminConnectImporter
     }
 
     private string? GetConfigValue(string key) => _config[$"GarminConnect:{key}"];
+
+    private bool ShouldFetchStepsOnly()
+    {
+        var value = GetConfigValue("StepsOnly") ?? Environment.GetEnvironmentVariable("GARMIN_FETCH_STEPS_ONLY");
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return false;
+        }
+
+        return value.Equals("1", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("true", StringComparison.OrdinalIgnoreCase)
+            || value.Equals("yes", StringComparison.OrdinalIgnoreCase);
+    }
 
     private static string ResolveScriptPath()
     {

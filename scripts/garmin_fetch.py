@@ -235,6 +235,12 @@ def main(argv: Optional[List[str]] = None) -> int:
         default=50,
         help="Maximum number of activities to fetch when no date range is supplied",
     )
+    parser.add_argument(
+        "--steps-only",
+        dest="steps_only",
+        action="store_true",
+        help="Fetch only daily step summaries and skip activity/sleep calls",
+    )
 
     args = parser.parse_args(argv)
 
@@ -245,159 +251,163 @@ def main(argv: Optional[List[str]] = None) -> int:
     client = Garmin(args.username, args.password)
     client.login()
 
-    try:
-        activities = client.get_activities_by_date(
-            start_date.isoformat(), end_date.isoformat())
-    except Exception:
-        # Fallback to index-based retrieval when the date endpoint fails.
-        activities = client.get_activities(0, args.max_count)
-
     activity_payload: List[Dict[str, Any]] = []
-    for item in activities:
-        activity_id = item.get("activityId")
-        if activity_id is not None:
-            activity_id = str(activity_id)
-        detail = _collect_activity_detail(client, activity_id)
+    if not args.steps_only:
+        try:
+            activities = client.get_activities_by_date(
+                start_date.isoformat(), end_date.isoformat())
+        except Exception:
+            # Fallback to index-based retrieval when the date endpoint fails.
+            activities = client.get_activities(0, args.max_count)
 
-        activity_payload.append(
-            {
-                "activityId": activity_id,
-                "activityName": item.get("activityName"),
-                "startTime": _normalise_timestamp(item.get("startTimeLocal") or item.get("startTimeGMT")),
-                "distanceMeters": item.get("distance"),
-                "durationSeconds": item.get("duration"),
-                "activityType": (item.get("activityType") or {}).get("typeKey"),
-                "detail": detail,
-            }
-        )
+        for item in activities:
+            activity_id = item.get("activityId")
+            if activity_id is not None:
+                activity_id = str(activity_id)
+            detail = _collect_activity_detail(client, activity_id)
 
-    step_payload: List[Dict[str, Any]] = []
-    try:
-        steps = client.get_daily_steps(
-            start_date.isoformat(), end_date.isoformat()) or []
-        for item in steps:
-            step_payload.append(
+            activity_payload.append(
                 {
-                    "date": item.get("calendarDate"),
-                    "totalSteps": item.get("totalSteps"),
-                    "goal": item.get("dailyStepGoal"),
-                    "totalCalories": item.get("totalKilocalories"),
-                    "activeCalories": item.get("activeKilocalories"),
-                    "totalDistanceMeters": item.get("totalDistanceMeters"),
+                    "activityId": activity_id,
+                    "activityName": item.get("activityName"),
+                    "startTime": _normalise_timestamp(item.get("startTimeLocal") or item.get("startTimeGMT")),
+                    "distanceMeters": item.get("distance"),
+                    "durationSeconds": item.get("duration"),
+                    "activityType": (item.get("activityType") or {}).get("typeKey"),
+                    "detail": detail,
                 }
             )
-    except Exception:
-        # Leave steps empty; the caller will handle missing data.
-        step_payload = []
 
-    sleep_payload: List[Dict[str, Any]] = []
-    sleep_detail_payload: List[Dict[str, Any]] = []
-
-    activity_level_stage = {
-        0: "Deep",
-        1: "Light",
-        2: "REM",
-        3: "Awake",
-    }
+    step_payload: List[Dict[str, Any]] = []
     for day in _date_range(start_date, end_date):
+        iso_date = day.isoformat()
         try:
-            raw = client.get_sleep_data(day.isoformat()) or {}
+            stats = client.get_stats_and_body(iso_date) or {}
         except Exception:
             continue
 
-        summary = (raw.get("dailySleepDTO") or {}
-                   ) if isinstance(raw, dict) else {}
-        if not summary:
+        if not isinstance(stats, dict) or not stats:
             continue
 
-        detail_levels: List[Dict[str, Any]] = []
-        for segment in raw.get("sleepLevels") or []:
-            activity_level = segment.get("activityLevel")
-            try:
-                stage_key = int(float(activity_level)
-                                ) if activity_level is not None else None
-            except (TypeError, ValueError):
-                stage_key = None
-
-            stage = activity_level_stage.get(
-                stage_key) if stage_key is not None else None
-            start_utc = _normalise_gmt_timestamp(segment.get("startGMT"))
-            end_utc = _normalise_gmt_timestamp(segment.get("endGMT"))
-
-            if stage and start_utc and end_utc:
-                detail_levels.append({
-                    "stage": stage,
-                    "startUtc": start_utc,
-                    "endUtc": end_utc,
-                })
-
-        def _collect_sample(series: Iterable[Dict[str, Any]], *, start_key: str, value_key: str) -> List[Dict[str, Any]]:
-            samples: List[Dict[str, Any]] = []
-            for item in series:
-                start_value = item.get(start_key)
-                value = _safe_float(item.get(value_key))
-                if value is None:
-                    continue
-
-                timestamp = (
-                    _millis_to_iso(start_value)
-                    if isinstance(start_value, (int, float, str)) and str(start_value).isdigit()
-                    else _normalise_gmt_timestamp(start_value)
-                )
-                if timestamp:
-                    samples.append({
-                        "timestampUtc": timestamp,
-                        "value": value,
-                    })
-            return samples
-
-        movement_samples: List[Dict[str, Any]] = []
-        for segment in raw.get("sleepMovement") or []:
-            timestamp = _normalise_gmt_timestamp(segment.get("startGMT"))
-            value = _safe_float(segment.get("activityLevel"))
-            if timestamp is not None and value is not None:
-                movement_samples.append({
-                    "timestampUtc": timestamp,
-                    "value": value,
-                })
-
-        heart_rate_samples = _collect_sample(
-            raw.get("sleepHeartRate") or [], start_key="startGMT", value_key="value")
-        body_battery_samples = _collect_sample(
-            raw.get("sleepBodyBattery") or [], start_key="startGMT", value_key="value")
-
-        sleep_payload.append(
+        step_payload.append(
             {
-                "date": summary.get("calendarDate") or day.isoformat(),
-                "sleepTimeSeconds": summary.get("sleepTimeSeconds"),
-                "deepSleepSeconds": summary.get("deepSleepSeconds"),
-                "lightSleepSeconds": summary.get("lightSleepSeconds"),
-                "remSleepSeconds": summary.get("remSleepSeconds"),
-                "awakeSleepSeconds": summary.get("awakeSleepSeconds"),
-                "sleepScore": summary.get("overallSleepScore"),
-                "sleepQualityType": summary.get("sleepQualityType"),
-                "sleepStartLocal": _millis_to_iso(summary.get("sleepStartTimestampLocal")),
-                "sleepEndLocal": _millis_to_iso(summary.get("sleepEndTimestampLocal")),
-                "sleepStartGmt": _millis_to_iso(summary.get("sleepStartTimestampGMT")),
-                "sleepEndGmt": _millis_to_iso(summary.get("sleepEndTimestampGMT")),
-                "sleepRestingHeartRate": summary.get("sleepRestingHeartRate"),
-                "bodyBatteryChange": summary.get("bodyBatteryChange"),
-                "averageRespirationValue": summary.get("averageRespirationValue"),
-                "lowestSpO2Value": summary.get("lowestSpO2Value"),
-                "sleepTimeGoalSeconds": summary.get("sleepTimeGoalSeconds"),
+                "date": stats.get("calendarDate") or iso_date,
+                "totalSteps": stats.get("totalSteps"),
+                "goal": stats.get("dailyStepGoal"),
+                "totalCalories": stats.get("totalKilocalories"),
+                "activeCalories": stats.get("activeKilocalories"),
+                "totalDistanceMeters": stats.get("totalDistanceMeters"),
             }
         )
 
-        detail_entry = {
-            "date": summary.get("calendarDate") or day.isoformat(),
-            "levels": detail_levels,
-            "movement": movement_samples,
-            "heartRate": heart_rate_samples,
-            "bodyBattery": body_battery_samples,
+    sleep_payload: List[Dict[str, Any]] = []
+    sleep_detail_payload: List[Dict[str, Any]] = []
+    if not args.steps_only:
+        activity_level_stage = {
+            0: "Deep",
+            1: "Light",
+            2: "REM",
+            3: "Awake",
         }
+        for day in _date_range(start_date, end_date):
+            try:
+                raw = client.get_sleep_data(day.isoformat()) or {}
+            except Exception:
+                continue
 
-        if any(detail_entry[key] for key in ("levels", "movement", "heartRate", "bodyBattery")):
-            sleep_detail_payload.append(detail_entry)
+            summary = (raw.get("dailySleepDTO") or {}
+                       ) if isinstance(raw, dict) else {}
+            if not summary:
+                continue
+
+            detail_levels: List[Dict[str, Any]] = []
+            for segment in raw.get("sleepLevels") or []:
+                activity_level = segment.get("activityLevel")
+                try:
+                    stage_key = int(float(activity_level)
+                                    ) if activity_level is not None else None
+                except (TypeError, ValueError):
+                    stage_key = None
+
+                stage = activity_level_stage.get(
+                    stage_key) if stage_key is not None else None
+                start_utc = _normalise_gmt_timestamp(segment.get("startGMT"))
+                end_utc = _normalise_gmt_timestamp(segment.get("endGMT"))
+
+                if stage and start_utc and end_utc:
+                    detail_levels.append({
+                        "stage": stage,
+                        "startUtc": start_utc,
+                        "endUtc": end_utc,
+                    })
+
+            def _collect_sample(series: Iterable[Dict[str, Any]], *, start_key: str, value_key: str) -> List[Dict[str, Any]]:
+                samples: List[Dict[str, Any]] = []
+                for item in series:
+                    start_value = item.get(start_key)
+                    value = _safe_float(item.get(value_key))
+                    if value is None:
+                        continue
+
+                    timestamp = (
+                        _millis_to_iso(start_value)
+                        if isinstance(start_value, (int, float, str)) and str(start_value).isdigit()
+                        else _normalise_gmt_timestamp(start_value)
+                    )
+                    if timestamp:
+                        samples.append({
+                            "timestampUtc": timestamp,
+                            "value": value,
+                        })
+                return samples
+
+            movement_samples: List[Dict[str, Any]] = []
+            for segment in raw.get("sleepMovement") or []:
+                timestamp = _normalise_gmt_timestamp(segment.get("startGMT"))
+                value = _safe_float(segment.get("activityLevel"))
+                if timestamp is not None and value is not None:
+                    movement_samples.append({
+                        "timestampUtc": timestamp,
+                        "value": value,
+                    })
+
+            heart_rate_samples = _collect_sample(
+                raw.get("sleepHeartRate") or [], start_key="startGMT", value_key="value")
+            body_battery_samples = _collect_sample(
+                raw.get("sleepBodyBattery") or [], start_key="startGMT", value_key="value")
+
+            sleep_payload.append(
+                {
+                    "date": summary.get("calendarDate") or day.isoformat(),
+                    "sleepTimeSeconds": summary.get("sleepTimeSeconds"),
+                    "deepSleepSeconds": summary.get("deepSleepSeconds"),
+                    "lightSleepSeconds": summary.get("lightSleepSeconds"),
+                    "remSleepSeconds": summary.get("remSleepSeconds"),
+                    "awakeSleepSeconds": summary.get("awakeSleepSeconds"),
+                    "sleepScore": summary.get("overallSleepScore"),
+                    "sleepQualityType": summary.get("sleepQualityType"),
+                    "sleepStartLocal": _millis_to_iso(summary.get("sleepStartTimestampLocal")),
+                    "sleepEndLocal": _millis_to_iso(summary.get("sleepEndTimestampLocal")),
+                    "sleepStartGmt": _millis_to_iso(summary.get("sleepStartTimestampGMT")),
+                    "sleepEndGmt": _millis_to_iso(summary.get("sleepEndTimestampGMT")),
+                    "sleepRestingHeartRate": summary.get("sleepRestingHeartRate"),
+                    "bodyBatteryChange": summary.get("bodyBatteryChange"),
+                    "averageRespirationValue": summary.get("averageRespirationValue"),
+                    "lowestSpO2Value": summary.get("lowestSpO2Value"),
+                    "sleepTimeGoalSeconds": summary.get("sleepTimeGoalSeconds"),
+                }
+            )
+
+            detail_entry = {
+                "date": summary.get("calendarDate") or day.isoformat(),
+                "levels": detail_levels,
+                "movement": movement_samples,
+                "heartRate": heart_rate_samples,
+                "bodyBattery": body_battery_samples,
+            }
+
+            if any(detail_entry[key] for key in ("levels", "movement", "heartRate", "bodyBattery")):
+                sleep_detail_payload.append(detail_entry)
 
     payload = {
         "window": {

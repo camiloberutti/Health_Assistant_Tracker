@@ -12,6 +12,7 @@ using GarminTempApi.Services;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Configuration;
 
 LoadDotEnvIfPresent();
 
@@ -93,6 +94,7 @@ builder.Services.AddHttpClient<IOpenAiInsightService, OpenAiInsightService>(clie
     client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 });
 
+var seedSampleSteps = ShouldSeedSampleSteps(builder.Configuration);
 var syncOnce = ShouldRunSyncOnce();
 
 var app = builder.Build();
@@ -116,17 +118,25 @@ using (var scope = app.Services.CreateScope())
         );");
     EnsureSleepSummaryColumns(db.Database.GetDbConnection());
 
-    var importer = scope.ServiceProvider.GetRequiredService<GarminConnectImporter>();
-    var seededSteps = await EnsureSampleStepDataAsync(db, CancellationToken.None);
-    if (seededSteps > 0)
+    var loggerFactory = scope.ServiceProvider.GetRequiredService<ILoggerFactory>();
+    var logger = loggerFactory.CreateLogger("SampleDataSeeder");
+
+    if (seedSampleSteps)
     {
-        var loggerFactory = scope.ServiceProvider.GetRequiredService<ILoggerFactory>();
-        var logger = loggerFactory.CreateLogger("SampleDataSeeder");
-        logger.LogInformation(
-            importer.HasCredentials()
-                ? "Seeded {Count} sample step summaries. Real Garmin sync will replace them once it succeeds."
-                : "Seeded {Count} sample step summaries for demo mode.",
-            seededSteps);
+        var importer = scope.ServiceProvider.GetRequiredService<GarminConnectImporter>();
+        var seededSteps = await EnsureSampleStepDataAsync(db, CancellationToken.None);
+        if (seededSteps > 0)
+        {
+            logger.LogInformation(
+                importer.HasCredentials()
+                    ? "Seeded {Count} sample step summaries. Real Garmin sync will replace them once it succeeds."
+                    : "Seeded {Count} sample step summaries for demo mode.",
+                seededSteps);
+        }
+    }
+    else
+    {
+        logger.LogInformation("Sample step seeding disabled. Expecting Garmin sync to populate StepSummaries.");
     }
 }
 
@@ -162,6 +172,22 @@ app.Run();
 static bool ShouldRunSyncOnce()
 {
     var value = Environment.GetEnvironmentVariable("GARMIN_SYNC_ONCE");
+    if (string.IsNullOrWhiteSpace(value))
+    {
+        return false;
+    }
+
+    return value.Equals("1", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("true", StringComparison.OrdinalIgnoreCase)
+        || value.Equals("yes", StringComparison.OrdinalIgnoreCase);
+}
+
+static bool ShouldSeedSampleSteps(IConfiguration configuration)
+{
+    var value = Environment.GetEnvironmentVariable("GARMIN_SEED_SAMPLE_STEPS")
+        ?? configuration["Garmin:SeedSampleSteps"]
+        ?? configuration["SeedSampleSteps"];
+
     if (string.IsNullOrWhiteSpace(value))
     {
         return false;
