@@ -48,6 +48,7 @@ builder.Services.AddScoped<GarminTempApi.Services.IActivityParser, GarminTempApi
 builder.Services.AddScoped<GarminTempApi.Services.FitActivityParser>();
 builder.Services.AddScoped<InsightDataBuilder>();
 builder.Services.AddScoped<DataStatusService>();
+builder.Services.AddScoped<DashboardSummaryService>();
 
 builder.Services.AddOptions<OpenAiOptions>()
     .Bind(builder.Configuration.GetSection(OpenAiOptions.SectionName))
