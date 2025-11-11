@@ -1,0 +1,13 @@
+@model GarminTempApi.Pages.Activities.DetailsModel
+
+<div class="card shadow-sm mb-4">
+    <div class="card-body">
+        <h5 class="card-title mb-2">Studio Session Overview</h5>
+        <p class="text-muted mb-0">
+            Location data is not recorded for this activity type. Tailor this section with sport-specific guidance,
+            effort summaries, or rep/set breakdowns as needed.
+        </p>
+    </div>
+</div>
+
+@await Html.PartialAsync("/Pages/Activities/DetailsPartials/_Details.Charts.cshtml", Model)

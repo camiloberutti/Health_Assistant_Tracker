@@ -1,0 +1,201 @@
+@model GarminTempApi.Pages.Activities.DetailsModel
+
+<style>
+    .visual-card .chart-wrapper {
+        position: relative;
+        height: 280px;
+    }
+
+    .visual-card canvas {
+        width: 100% !important;
+        height: 100% !important;
+    }
+
+    .chart-empty {
+        display: none;
+    }
+
+    .chart-empty.active {
+        display: block;
+    }
+</style>
+
+<div class="row g-4 mb-4">
+    <div class="col-12 col-lg-4">
+        <div class="card shadow-sm visual-card h-100">
+            <div class="card-header fw-semibold">Heart Rate</div>
+            <div class="card-body">
+                <div class="chart-wrapper">
+                    <canvas id="chartHeartRate"></canvas>
+                </div>
+                <p id="heartEmptyState" class="chart-empty text-muted small mb-0">No heart rate samples available.</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-lg-4">
+        <div class="card shadow-sm visual-card h-100">
+            <div class="card-header fw-semibold">Elevation Profile</div>
+            <div class="card-body">
+                <div class="chart-wrapper">
+                    <canvas id="chartAltitude"></canvas>
+                </div>
+                <p id="altitudeEmptyState" class="chart-empty text-muted small mb-0">No altitude readings available.</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-12 col-lg-4">
+        <div class="card shadow-sm visual-card h-100">
+            <div class="card-header fw-semibold">Average Pace</div>
+            <div class="card-body">
+                <div class="chart-wrapper">
+                    <canvas id="chartPace"></canvas>
+                </div>
+                <p id="paceEmptyState" class="chart-empty text-muted small mb-0">Insufficient distance data to calculate
+                    pace.</p>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+    (function () {
+        const trackPoints = @Html.Raw(Model.VisualizationJson);
+        const isArray = Array.isArray(trackPoints);
+
+        window.activityVisualization = window.activityVisualization || {};
+        const vizState = window.activityVisualization;
+        vizState.rawPoints = trackPoints;
+        vizState.coordinatePoints = isArray
+            ? trackPoints.filter(p => typeof p.latitude === 'number' && typeof p.longitude === 'number')
+            : [];
+
+        const chartIds = ['chartHeartRate', 'chartAltitude', 'chartPace'];
+        const emptyIds = ['heartEmptyState', 'altitudeEmptyState', 'paceEmptyState'];
+        const mapCard = document.querySelector('.map-card');
+
+        const activateEmptyStates = () => {
+            chartIds.forEach(id => document.getElementById(id)?.classList.add('d-none'));
+            emptyIds.forEach(id => document.getElementById(id)?.classList.add('active'));
+        };
+
+        if (!isArray || trackPoints.length === 0) {
+            activateEmptyStates();
+            mapCard?.classList.add('d-none');
+            return;
+        }
+
+        if (typeof Chart === 'undefined') {
+            return;
+        }
+
+        const isNumber = (value) => typeof value === 'number' && !Number.isNaN(value);
+
+        const bodyStyles = window.getComputedStyle(document.body);
+        Chart.defaults.color = bodyStyles.getPropertyValue('--bs-body-color') || Chart.defaults.color;
+        Chart.defaults.font.family = bodyStyles.getPropertyValue('--bs-body-font-family') || Chart.defaults.font.family;
+
+        const baseLineOptions = {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: { intersect: false, mode: 'index' },
+            plugins: { legend: { display: false } }
+        };
+
+        const renderChart = (canvasId, emptyId, config) => {
+            const canvas = document.getElementById(canvasId);
+            const empty = document.getElementById(emptyId);
+            if (!canvas || !empty) {
+                return;
+            }
+
+            if (!config || config.labels.length === 0 || config.datasets.every(ds => ds.data.length === 0)) {
+                empty.classList.add('active');
+                canvas.classList.add('d-none');
+                return;
+            }
+
+            empty.classList.remove('active');
+            canvas.classList.remove('d-none');
+
+            new Chart(canvas.getContext('2d'), {
+                type: 'line',
+                data: {
+                    labels: config.labels,
+                    datasets: config.datasets
+                },
+                options: {
+                    ...baseLineOptions,
+                    ...config.options
+                }
+            });
+        };
+
+        const heartPoints = trackPoints.filter(p => isNumber(p.heartRate));
+        renderChart('chartHeartRate', 'heartEmptyState', {
+            labels: heartPoints.map(p => p.timeLabel),
+            datasets: [
+                {
+                    label: 'Heart Rate (bpm)',
+                    data: heartPoints.map(p => p.heartRate),
+                    borderColor: '#dc3545',
+                    backgroundColor: 'rgba(220,53,69,0.15)',
+                    tension: 0.25,
+                    radius: 0
+                }
+            ],
+            options: {
+                scales: {
+                    x: { title: { display: true, text: 'Time' } },
+                    y: { title: { display: true, text: 'bpm' } }
+                }
+            }
+        });
+
+        const altitudePoints = trackPoints.filter(p => isNumber(p.altitude));
+        renderChart('chartAltitude', 'altitudeEmptyState', {
+            labels: altitudePoints.map(p => p.distanceKm.toFixed(2)),
+            datasets: [
+                {
+                    label: 'Altitude (m)',
+                    data: altitudePoints.map(p => p.altitude),
+                    borderColor: '#0d6efd',
+                    backgroundColor: 'rgba(13,110,253,0.15)',
+                    tension: 0.3,
+                    radius: 0,
+                    fill: true
+                }
+            ],
+            options: {
+                scales: {
+                    x: { title: { display: true, text: 'Distance (km)' } },
+                    y: { title: { display: true, text: 'Meters' } }
+                }
+            }
+        });
+
+        const pacePoints = trackPoints.filter(p => isNumber(p.paceMinutesPerKm) && p.paceMinutesPerKm > 2 && p.paceMinutesPerKm < 15);
+        renderChart('chartPace', 'paceEmptyState', {
+            labels: pacePoints.map(p => p.distanceKm.toFixed(2)),
+            datasets: [
+                {
+                    label: 'Pace (min/km)',
+                    data: pacePoints.map(p => Number(p.paceMinutesPerKm.toFixed(2))),
+                    borderColor: '#20c997',
+                    backgroundColor: 'rgba(32,201,151,0.15)',
+                    tension: 0.3,
+                    radius: 0
+                }
+            ],
+            options: {
+                scales: {
+                    x: { title: { display: true, text: 'Distance (km)' } },
+                    y: {
+                        title: { display: true, text: 'Minutes per km' },
+                        reverse: true
+                    }
+                }
+            }
+        });
+    })();
+</script>

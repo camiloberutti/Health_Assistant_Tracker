@@ -1,0 +1,89 @@
+@model GarminTempApi.Pages.Activities.DetailsModel
+
+<link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+<style>
+    #activityMap {
+        height: 360px;
+        width: 100%;
+        border-radius: 0 0 .75rem .75rem;
+    }
+
+    .map-card .card-body {
+        padding: 0;
+    }
+</style>
+
+@if (Model.TrackPointCount > 0)
+{
+    <div class="card shadow-sm mb-4 map-card">
+        <div class="card-header d-flex justify-content-between align-items-center">
+            <span class="fw-semibold">Route Map</span>
+            <span class="text-muted small">@Model.TrackPointCount track points</span>
+        </div>
+        <div class="card-body p-0">
+            <div id="activityMap"></div>
+        </div>
+    </div>
+}
+else
+{
+    <div class="alert alert-info mb-4">
+        No GPS-derived track points were recorded for this activity.
+    </div>
+}
+
+@await Html.PartialAsync("/Pages/Activities/DetailsPartials/_Details.Charts.cshtml", Model)
+
+<script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+<script>
+    (function () {
+        const mapElement = document.getElementById('activityMap');
+        if (!mapElement || typeof L === 'undefined') {
+            return;
+        }
+
+        const viz = window.activityVisualization;
+        if (!viz || !Array.isArray(viz.coordinatePoints) || viz.coordinatePoints.length === 0) {
+            const card = mapElement.closest('.map-card');
+            card?.classList.add('d-none');
+            return;
+        }
+
+        const coordinatePoints = viz.coordinatePoints;
+        const latLngs = coordinatePoints.map(p => [p.latitude, p.longitude]);
+
+        const map = L.map(mapElement, { scrollWheelZoom: false });
+        L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+            attribution: '&copy; OpenStreetMap contributors'
+        }).addTo(map);
+
+        let routeLayer = null;
+        if (latLngs.length > 1) {
+            routeLayer = L.polyline(latLngs, { color: '#38bdf8', weight: 6, opacity: 0.95 }).addTo(map);
+        }
+
+        const start = latLngs[0];
+        L.circleMarker(start, { color: '#198754', radius: 6 })
+            .addTo(map)
+            .bindPopup('Start');
+
+        if (latLngs.length > 1) {
+            const finish = latLngs[latLngs.length - 1];
+            L.circleMarker(finish, { color: '#dc3545', radius: 6 })
+                .addTo(map)
+                .bindPopup('Finish');
+        }
+
+        if (routeLayer) {
+            const bounds = routeLayer.getBounds();
+            if (bounds.isValid()) {
+                map.fitBounds(bounds, { padding: [25, 25] });
+            }
+        } else {
+            map.setView(start, 15);
+        }
+
+        map.whenReady(() => setTimeout(() => map.invalidateSize(), 150));
+    })();
+</script>
