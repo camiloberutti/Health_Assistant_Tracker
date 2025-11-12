@@ -3,6 +3,7 @@
 @using System.Text.Json
 @using System.Text.Json.Serialization
 @using System.Globalization
+@using System.Linq
 @{
     Layout = "_Layout";
 
@@ -42,6 +43,19 @@
 else
 {
     var entry = Model.Entry!;
+    var timelineStart = Model.StageTimeline.Count > 0
+        ? Model.StageTimeline.Min(segment => segment.Start)
+        : entry.SleepStartLocal ?? entry.SleepStartGmt;
+    var timelineEnd = Model.StageTimeline.Count > 0
+        ? Model.StageTimeline.Max(segment => segment.End)
+        : entry.SleepEndLocal ?? entry.SleepEndGmt;
+
+    var timelineStartLocal = timelineStart?.Kind == DateTimeKind.Utc
+        ? timelineStart.Value.ToLocalTime()
+        : timelineStart;
+    var timelineEndLocal = timelineEnd?.Kind == DateTimeKind.Utc
+        ? timelineEnd.Value.ToLocalTime()
+        : timelineEnd;
 
     <style>
         .sleep-today-donut {
@@ -172,11 +186,11 @@ else
                     <div class="d-flex justify-content-between align-items-center mb-2">
                         <div>
                             <div class="text-muted small">Bed Time</div>
-                            <div class="fw-semibold">@FormatTime(entry.SleepStartLocal)</div>
+                            <div class="fw-semibold">@FormatTime(timelineStartLocal)</div>
                         </div>
                         <div>
                             <div class="text-muted small">Wake Time</div>
-                            <div class="fw-semibold">@FormatTime(entry.SleepEndLocal)</div>
+                            <div class="fw-semibold">@FormatTime(timelineEndLocal)</div>
                         </div>
                     </div>
 
@@ -272,6 +286,7 @@ else
 
     <script id="sleepTodayData" type="application/json">@Html.Raw(detailJson)</script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-date-fns@3.0.0"></script>
     <script>
         (() => {
             const dataElement = document.getElementById('sleepTodayData');
@@ -291,126 +306,431 @@ else
                 return;
             }
 
+            const stageLevels = [
+                { key: 'Awake', label: 'Awake', value: 1, color: '#facc15' },
+                { key: 'Light', label: 'Light sleep', value: 2, color: '#60a5fa' },
+                { key: 'REM', label: 'REM sleep', value: 3, color: '#d946ef' },
+                { key: 'Deep', label: 'Deep sleep', value: 4, color: '#1e3a8a' }
+            ];
+
+            const stageLookup = stageLevels.reduce((acc, entry) => {
+                acc[entry.key] = entry;
+                return acc;
+            }, {});
+
+            const stageValueLookup = stageLevels.reduce((acc, entry) => {
+                acc[entry.value] = entry;
+                return acc;
+            }, {});
+
+            const fallbackStageKey = 'Light';
+            let stageSegments = [];
+
+            const sleepStageBlocksPlugin = {
+                id: 'sleepStageBlocks',
+                beforeEvent(chart, args) {
+                    if (!stageSegments.length) {
+                        return;
+                    }
+
+                    const event = args.event;
+                    if (!event) {
+                        return;
+                    }
+
+                    const datasetIndex = chart.data.datasets.findIndex(ds => ds.role === 'stage');
+                    if (datasetIndex < 0) {
+                        return;
+                    }
+
+                    chart.$sleepStageBlocks = chart.$sleepStageBlocks || { activeIndex: -1 };
+                    const store = chart.$sleepStageBlocks;
+
+                    if (event.type === 'mouseout') {
+                        if (store.activeIndex !== -1) {
+                            store.activeIndex = -1;
+                            chart.setActiveElements([]);
+                            chart.tooltip.update();
+                            chart.draw();
+                        }
+                        return;
+                    }
+
+                    if (event.type !== 'mousemove') {
+                        return;
+                    }
+
+                    const xScale = chart.scales.x;
+                    if (!xScale) {
+                        return;
+                    }
+
+                    const value = xScale.getValueForPixel(event.x);
+                    if (!Number.isFinite(value)) {
+                        return;
+                    }
+
+                    let activeIndex = -1;
+                    for (let i = 0; i < stageSegments.length; i++) {
+                        const segment = stageSegments[i];
+                        if (value >= segment.startValue && value <= segment.endValue) {
+                            activeIndex = i;
+                            break;
+                        }
+                    }
+
+                    if (activeIndex === store.activeIndex) {
+                        return;
+                    }
+
+                    store.activeIndex = activeIndex;
+                    if (activeIndex === -1) {
+                        chart.setActiveElements([]);
+                    }
+                    else {
+                        const meta = chart.getDatasetMeta(datasetIndex);
+                        if (!meta?.data?.length || activeIndex >= meta.data.length) {
+                            return;
+                        }
+                        chart.setActiveElements([{ datasetIndex, index: activeIndex }]);
+                    }
+
+                    chart.tooltip.update();
+                    chart.draw();
+                },
+                beforeDatasetsDraw(chart) {
+                    if (!stageSegments.length) {
+                        return;
+                    }
+
+                    const xScale = chart.scales.x;
+                    const yScale = chart.scales.stage;
+                    const chartArea = chart.chartArea;
+                    if (!xScale || !yScale || !chartArea) {
+                        return;
+                    }
+
+                    const ctx = chart.ctx;
+                    ctx.save();
+                    ctx.beginPath();
+                    ctx.rect(chartArea.left, chartArea.top, chartArea.width, chartArea.height);
+                    ctx.clip();
+
+                    const activeIndex = chart.$sleepStageBlocks?.activeIndex ?? -1;
+
+                    stageSegments.forEach((segment, index) => {
+                        const definition = segment.definition;
+                        const xStart = xScale.getPixelForValue(segment.start);
+                        const xEnd = xScale.getPixelForValue(segment.end);
+                        if (!Number.isFinite(xStart) || !Number.isFinite(xEnd) || xEnd <= xStart) {
+                            return;
+                        }
+
+                        const value = definition.value;
+                        const yTop = yScale.getPixelForValue(value + 0.5);
+                        const yBottom = yScale.getPixelForValue(value - 0.5);
+                        const top = Math.min(yTop, yBottom);
+                        const height = Math.max(Math.abs(yBottom - yTop), 1);
+
+                        ctx.fillStyle = definition.color;
+                        ctx.strokeStyle = definition.color;
+                        ctx.lineWidth = index === activeIndex ? 2 : 1;
+                        ctx.globalAlpha = index === activeIndex ? 0.95 : 0.8;
+                        ctx.beginPath();
+                        ctx.rect(xStart, top, xEnd - xStart, height);
+                        ctx.fill();
+                        ctx.stroke();
+                        ctx.globalAlpha = 1;
+                    });
+
+                    ctx.restore();
+                }
+            };
+
             const slices = Array.isArray(payload.stageSlices)
                 ? payload.stageSlices.filter(slice => (slice?.seconds ?? 0) > 0)
                 : [];
 
-                if (slices.length) {
-                    const donutCtx = document.getElementById('sleepTodayDonut');
-                    if (donutCtx) {
-                        new Chart(donutCtx, {
-                            type: 'doughnut',
-                            data: {
-                                labels: slices.map(slice => slice.label),
-                                datasets: [{
-                                    data: slices.map(slice => toHours(slice.seconds)),
-                                    backgroundColor: slices.map(slice => slice.color),
-                                    borderWidth: 0,
-                                    hoverOffset: 6
-                                }]
-                            },
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                cutout: '70%',
-                                plugins: {
-                                    legend: { display: false },
-                                    tooltip: {
-                                        callbacks: {
-                                            label: context => {
-                                                const stage = context.label || '';
-                                                const seconds = (context.parsed ?? 0) * 3600;
-                                                return `${stage}: ${formatDuration(seconds)}`;
-                                            }
+            if (slices.length) {
+                const donutCtx = document.getElementById('sleepTodayDonut');
+                if (donutCtx) {
+                    new Chart(donutCtx, {
+                        type: 'doughnut',
+                        data: {
+                            labels: slices.map(slice => slice.label),
+                            datasets: [{
+                                data: slices.map(slice => toHours(slice.seconds)),
+                                backgroundColor: slices.map(slice => slice.color),
+                                borderWidth: 0,
+                                hoverOffset: 6
+                            }]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            cutout: '70%',
+                            plugins: {
+                                legend: { display: false },
+                                tooltip: {
+                                    callbacks: {
+                                        label: context => {
+                                            const stage = context.label || '';
+                                            const seconds = (context.parsed ?? 0) * 3600;
+                                            return `${stage}: ${formatDuration(seconds)}`;
                                         }
                                     }
                                 }
                             }
-                        });
-                    }
+                        }
+                    });
+                }
+            }
 
-                    const timelineCtx = document.getElementById('sleepTimelineChart');
-                    if (timelineCtx && Array.isArray(payload.timeline) && payload.timeline.length) {
-                        const stageDatasets = buildStageDatasets(payload.timeline);
-                        const overlayState = createOverlayState();
+            const timelineCtx = document.getElementById('sleepTimelineChart');
+            if (timelineCtx && Array.isArray(payload.timeline) && payload.timeline.length) {
+                stageSegments = normalizeTimeline(payload.timeline);
+                if (stageSegments.length) {
+                    const stageDataset = buildStageDataset(stageSegments);
+                    const overlayState = createOverlayState();
 
-                        const timelineChart = new Chart(timelineCtx, {
-                            type: 'bar',
-                            data: {
-                                labels: ['Sleep'],
-                                datasets: stageDatasets
-                            },
-                            options: {
-                                responsive: true,
-                                maintainAspectRatio: false,
-                                scales: {
-                                    x: {
-                                        type: 'time',
-                                        stacked: true,
-                                        time: {
-                                            displayFormats: { minute: 'h:mm a' },
-                                            tooltipFormat: 'dd MMM yy, h:mm a'
-                                        },
-                                        ticks: {
-                                            autoSkip: true,
-                                            maxTicksLimit: 6
-                                        }
-                                    },
-                                    y: {
-                                        type: 'category',
-                                        labels: ['Sleep'],
-                                        stacked: true,
-                                        ticks: { display: false },
-                                        grid: { display: false }
-                                    },
-                                    overlay: {
-                                        position: 'right',
-                                        display: false,
-                                        grid: { display: false },
-                                        ticks: {
-                                            callback: value => value
+                    const timelineChart = new Chart(timelineCtx, {
+                        type: 'scatter',
+                        data: {
+                            datasets: [stageDataset]
+                        },
+                        options: {
+                            responsive: true,
+                            maintainAspectRatio: false,
+                            parsing: false,
+                            animation: false,
+                            interaction: { intersect: false, mode: 'nearest', axis: 'x' },
+                            scales: buildTimelineScales(stageSegments),
+                            plugins: {
+                                legend: {
+                                    display: false,
+                                    labels: {
+                                        usePointStyle: true,
+                                        filter: (legendItem, chart) => {
+                                            const dataset = chart?.data?.datasets?.[legendItem.datasetIndex];
+                                            return dataset?.role !== 'stage';
                                         }
                                     }
                                 },
-                                plugins: {
-                                    legend: { display: false },
-                                    tooltip: {
-                                        callbacks: {
-                                            label: context => {
-                                                const raw = context.raw;
-                                                const stage = context.dataset.label || 'Sleep';
-                                                if (!raw || !Array.isArray(raw.x)) {
-                                                    return stage;
-                                                }
-
-                                                const [startValue, endValue] = raw.x;
-                                                const durationSeconds = diffInSeconds(startValue, endValue);
-                                                const rangeText = `${formatClock(startValue)} – ${formatClock(endValue)}`;
-                                                return `${stage}: ${rangeText} (${formatDuration(durationSeconds)})`;
-                                            }
-                                        }
+                                tooltip: {
+                                    intersect: false,
+                                    callbacks: {
+                                        title: context => context.length ? formatTooltipRange(context[0].raw) : '',
+                                        label: context => buildStageTooltipLabel(context),
+                                        afterLabel: context => buildStageTooltipDuration(context)
                                     }
-                                }
+                                },
+                                sleepStageBlocks: {}
                             }
-                        });
+                        },
+                        plugins: [sleepStageBlocksPlugin]
+                    });
 
-                        setupOverlayButtons(timelineChart, overlayState, payload);
-                    }
+                    setupOverlayButtons(timelineChart, overlayState, payload);
+                }
+            }
+            else if (timelineCtx) {
+                stageSegments = [];
+                console.warn('Sleep timeline payload missing or empty.', payload.timeline);
             }
 
-            function buildStageDatasets(timeline) {
-                return timeline.map(segment => ({
-                    type: 'bar',
-                    label: segment.stage,
+            function buildTimelineScales(segments) {
+                const first = segments[0];
+                const last = segments[segments.length - 1];
+
+                return {
+                    x: {
+                        type: 'time',
+                        min: first?.start ?? null,
+                        max: last?.end ?? null,
+                        time: {
+                            displayFormats: {
+                                hour: 'h:mm a',
+                                minute: 'h:mm a',
+                                second: 'h:mm:ss a',
+                                day: 'h:mm a'
+                            },
+                            tooltipFormat: 'dd MMM yy, h:mm a'
+                        },
+                        ticks: {
+                            autoSkip: true,
+                            maxTicksLimit: 8,
+                            callback: value => formatClock(value)
+                        },
+                        title: {
+                            display: true,
+                            text: 'Time',
+                            color: '#4b5563',
+                            font: { size: 12 }
+                        },
+                        grid: { drawBorder: false }
+                    },
+                    stage: {
+                        type: 'linear',
+                        position: 'left',
+                        min: 0.5,
+                        max: stageLevels.length + 0.5,
+                        ticks: {
+                            stepSize: 1,
+                            callback: value => {
+                                const rounded = Math.round(value);
+                                return stageValueLookup[rounded]?.label ?? '';
+                            }
+                        },
+                        title: {
+                            display: true,
+                            text: 'Sleep Stage',
+                            color: '#4b5563',
+                            font: { size: 12 }
+                        },
+                        grid: {
+                            drawTicks: false,
+                            drawBorder: false
+                        }
+                    },
+                    overlay: {
+                        type: 'linear',
+                        position: 'right',
+                        display: false,
+                        grid: { drawOnChartArea: false }
+                    }
+                };
+            }
+
+            function normalizeTimeline(timeline) {
+                if (!Array.isArray(timeline)) {
+                    return [];
+                }
+
+                return timeline
+                    .map(segment => {
+                        const start = toDate(segment.start);
+                        const end = toDate(segment.end);
+                        if (!start || !end || end <= start) {
+                            return null;
+                        }
+
+                        const stageKey = normalizeStage(segment.stage);
+                        const definition = getStageDefinition(stageKey);
+                        const startValue = start.getTime();
+                        const endValue = end.getTime();
+                        const midpoint = new Date((startValue + endValue) / 2);
+
+                        return {
+                            start,
+                            end,
+                            stageKey,
+                            definition,
+                            startValue,
+                            endValue,
+                            midpoint
+                        };
+                    })
+                    .filter(Boolean)
+                    .sort((a, b) => a.startValue - b.startValue);
+            }
+
+            function buildStageDataset(segments) {
+                return {
+                    label: 'Sleep Stage',
                     role: 'stage',
-                    data: [{ x: [segment.start, segment.end], y: 'Sleep' }],
-                    parsing: { xAxisKey: 'x', yAxisKey: 'y' },
-                    backgroundColor: segment.color,
-                    borderSkipped: false,
-                    categoryPercentage: 1,
-                    barPercentage: 1,
-                    stack: 'sleep'
-                }));
+                    type: 'scatter',
+                    parsing: false,
+                    data: segments.map(segment => ({
+                        x: segment.midpoint,
+                        y: segment.definition.value,
+                        stage: segment.stageKey,
+                        segmentStart: segment.start,
+                        segmentEnd: segment.end
+                    })),
+                    pointRadius: 0,
+                    pointHoverRadius: 0,
+                    pointHitRadius: 14,
+                    showLine: false,
+                    yAxisID: 'stage',
+                    xAxisID: 'x'
+                };
+            }
+
+            function formatTooltipRange(raw) {
+                const start = toDate(raw?.segmentStart);
+                const end = toDate(raw?.segmentEnd);
+                if (!start || !end) {
+                    return '';
+                }
+
+                const sameDay = start.toDateString() === end.toDateString();
+                const startLabel = start.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+                const endLabel = sameDay
+                    ? end.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
+                    : end.toLocaleString([], { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' });
+
+                return `${startLabel} – ${endLabel}`;
+            }
+
+            function getStageDefinition(stageKey) {
+                return stageLookup[stageKey] ?? stageLookup[fallbackStageKey];
+            }
+
+            function normalizeStage(stage) {
+                if (!stage) {
+                    return fallbackStageKey;
+                }
+
+                const key = stage.toString().trim().toUpperCase();
+                switch (key) {
+                    case 'DEEP':
+                    case 'SLEEP_DEEP':
+                        return 'Deep';
+                    case 'REM':
+                    case 'SLEEP_REM':
+                        return 'REM';
+                    case 'AWAKE':
+                    case 'WAKE':
+                    case 'OUT_OF_BED':
+                    case 'SLEEP_AWAKE':
+                    case 'SLEEP_OUT_OF_BED':
+                    case 'NOT_WORN':
+                    case 'RESTLESS':
+                    case 'SLEEP_RESTLESS':
+                        return 'Awake';
+                    case 'LIGHT':
+                    case 'SLEEP_LIGHT':
+                    case 'SLEEP_UNKNOWN':
+                        return 'Light';
+                    default:
+                        return fallbackStageKey;
+                }
+            }
+
+            function buildStageTooltipLabel(context) {
+                const raw = context.raw;
+                if (!raw || context.dataset?.role !== 'stage') {
+                    return context.dataset?.label || '';
+                }
+
+                const stageEntry = getStageDefinition(raw.stage);
+                return stageEntry.label;
+            }
+
+            function buildStageTooltipDuration(context) {
+                const raw = context.raw;
+                if (!raw || context.dataset?.role !== 'stage') {
+                    return null;
+                }
+
+                const start = toDate(raw.segmentStart);
+                const end = toDate(raw.segmentEnd);
+                if (!start || !end) {
+                    return null;
+                }
+
+                const durationSeconds = (end.getTime() - start.getTime()) / 1000;
+                return `Duration: ${formatDuration(durationSeconds)}`;
             }
 
             function createOverlayState() {
@@ -430,7 +750,7 @@ else
                             return;
                         }
 
-                        const hasSamples = Array.isArray(payload[key]) && payload[key].length;
+                        const hasSamples = hasOverlaySamples(payload[key]);
                         if (!hasSamples) {
                             button.classList.remove('active');
                             return;
@@ -442,41 +762,86 @@ else
                         updateOverlayDatasets(chart, overlayState, payload);
                     });
 
-                    if (!(Array.isArray(payload[button.dataset.overlay]) && payload[button.dataset.overlay].length)) {
+                    if (!hasOverlaySamples(payload[button.dataset.overlay])) {
                         button.classList.add('disabled');
                         button.setAttribute('disabled', 'disabled');
                     }
+                });
+
+                updateOverlayDatasets(chart, overlayState, payload);
+            }
+
+            function hasOverlaySamples(samples) {
+                if (!Array.isArray(samples) || !samples.length) {
+                    return false;
+                }
+
+                return samples.some(sample => {
+                    const timestamp = toDate(sample?.timestamp);
+                    return timestamp && typeof sample?.value === 'number' && !Number.isNaN(sample.value);
                 });
             }
 
             function updateOverlayDatasets(chart, overlayState, payload) {
                 const overlayDatasets = [];
 
-                if (overlayState.movement && Array.isArray(payload.movement) && payload.movement.length) {
-                    overlayDatasets.push(createLineDataset('Movement', payload.movement, '#10b981'));
+                if (overlayState.movement && hasOverlaySamples(payload.movement)) {
+                    const dataset = createLineDataset('Movement', payload.movement, '#10b981');
+                    if (dataset) {
+                        overlayDatasets.push(dataset);
+                    }
                 }
 
-                if (overlayState.resting && Array.isArray(payload.resting) && payload.resting.length) {
-                    overlayDatasets.push(createLineDataset('Resting HR', payload.resting, '#0ea5e9'));
+                if (overlayState.resting && hasOverlaySamples(payload.resting)) {
+                    const dataset = createLineDataset('Resting HR', payload.resting, '#0ea5e9');
+                    if (dataset) {
+                        overlayDatasets.push(dataset);
+                    }
                 }
 
-                if (overlayState.bodyBattery && Array.isArray(payload.bodyBattery) && payload.bodyBattery.length) {
-                    overlayDatasets.push(createLineDataset('Body Battery', payload.bodyBattery, '#f97316'));
+                if (overlayState.bodyBattery && hasOverlaySamples(payload.bodyBattery)) {
+                    const dataset = createLineDataset('Body Battery', payload.bodyBattery, '#f97316');
+                    if (dataset) {
+                        overlayDatasets.push(dataset);
+                    }
                 }
 
                 const baseDatasets = chart.data.datasets.filter(ds => ds.role === 'stage');
-                chart.data.datasets = [...baseDatasets, ...overlayDatasets];
+                chart.data.datasets = baseDatasets.length ? [...baseDatasets, ...overlayDatasets] : overlayDatasets;
 
+                chart.options.plugins.legend.display = overlayDatasets.length > 0;
                 chart.options.scales.overlay.display = overlayDatasets.length > 0;
+
+                if (chart.$sleepStageBlocks) {
+                    chart.$sleepStageBlocks.activeIndex = -1;
+                }
+
+                chart.setActiveElements([]);
                 chart.update();
             }
 
             function createLineDataset(label, samples, color) {
+                const points = samples
+                    .map(sample => {
+                        const timestamp = toDate(sample.timestamp);
+                        if (!timestamp || typeof sample.value !== 'number' || Number.isNaN(sample.value)) {
+                            return null;
+                        }
+                        return { x: timestamp, y: sample.value };
+                    })
+                    .filter(Boolean)
+                    .sort((a, b) => a.x.getTime() - b.x.getTime());
+
+                if (!points.length) {
+                    return null;
+                }
+
                 return {
                     type: 'line',
                     label,
                     role: 'overlay',
-                    data: samples.map(sample => ({ x: sample.timestamp, y: sample.value })),
+                    parsing: false,
+                    data: points,
                     borderColor: color,
                     backgroundColor: color,
                     borderWidth: 2,
@@ -499,15 +864,6 @@ else
                 const hours = Math.floor(total / 3600);
                 const minutes = Math.floor((total % 3600) / 60);
                 return `${hours}h ${minutes.toString().padStart(2, '0')}m`;
-            }
-
-            function diffInSeconds(start, end) {
-                const startDate = toDate(start);
-                const endDate = toDate(end);
-                if (!startDate || !endDate) {
-                    return NaN;
-                }
-                return (endDate.getTime() - startDate.getTime()) / 1000;
             }
 
             function formatClock(value) {
