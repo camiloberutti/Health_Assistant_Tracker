@@ -149,6 +149,17 @@ public class DetailsModel : PageModel
             }
         }
 
+        if (IsSwimActivity && SwimData is not null)
+        {
+            var swimMetrics = BuildSwimSummaryMetrics(SwimData, Activity);
+            if (swimMetrics.Count > 0)
+            {
+                var combined = SummaryMetrics.ToList();
+                combined.AddRange(swimMetrics);
+                SummaryMetrics = combined;
+            }
+        }
+
         VisualizationPoints = visualizationPoints;
         TrackPointCount = VisualizationPoints.Count;
         HasGeoTrack = VisualizationPoints.Any(p => p.Latitude.HasValue && p.Longitude.HasValue);
@@ -366,6 +377,31 @@ public class DetailsModel : PageModel
             });
             AddMetric(metrics, "Elevation Gain", summaryDto, "elevationGain", element => FormatNumber(element, suffix: " m"));
         }
+
+        return metrics;
+    }
+
+    private static IReadOnlyList<(string Label, string Value)> BuildSwimSummaryMetrics(SwimInsights swim, ActivityDetail? activity)
+    {
+        var activityDistance = activity is null ? (double?)null : activity.DistanceMeters;
+        var activityDuration = activity?.Duration;
+
+        var metrics = new List<(string Label, string Value)>
+        {
+            ("Distance", FormatSwimDistance(swim.DistanceMeters ?? activityDistance)),
+            ("Elapsed Time", FormatSwimDuration(swim.DurationSeconds, activityDuration)),
+            ("Average Pace", FormatSwimPace(swim.AverageSpeedMetersPerSecond)),
+            ("Average Heart Rate", FormatSwimNumber(swim.AverageHeartRate, " bpm", "0")),
+            ("Max Heart Rate", FormatSwimNumber(swim.MaxHeartRate, " bpm", "0")),
+            ("Calories", FormatSwimNumber(swim.Calories, " kcal", "0")),
+            ("Average Cadence", FormatSwimNumber(swim.AverageSwimCadence, " spm")),
+            ("Total Strokes", FormatSwimInt(swim.TotalStrokes)),
+            ("Average Stroke Distance", FormatSwimNumber(swim.AverageStrokeDistance, " m", "0.00")),
+            ("Average SWOLF", FormatSwimNumber(swim.AverageSwolf, suffix: string.Empty, format: "0")),
+            ("Pool Length", FormatSwimPoolLength(swim.PoolLength, swim.PoolLengthUnit)),
+            ("Active Lengths", FormatSwimInt(swim.ActiveLengths)),
+            ("Fastest Lap", FormatSwimDuration(swim.FastestLapSeconds, null))
+        };
 
         return metrics;
     }
@@ -625,6 +661,78 @@ public class DetailsModel : PageModel
         {
             return Array.Empty<SwimLap>();
         }
+    }
+
+    private static string FormatSwimDistance(double? meters)
+    {
+        if (!meters.HasValue)
+        {
+            return "—";
+        }
+
+        return meters.Value >= 1000
+            ? string.Format(CultureInfo.CurrentCulture, "{0:0.00} km", meters.Value / 1000d)
+            : string.Format(CultureInfo.CurrentCulture, "{0:0} m", meters.Value);
+    }
+
+    private static string FormatSwimDuration(double? seconds, TimeSpan? fallback)
+    {
+        if (seconds.HasValue)
+        {
+            var span = TimeSpan.FromSeconds(Math.Max(0, seconds.Value));
+            return span.TotalHours >= 1
+                ? span.ToString("hh\\:mm\\:ss")
+                : span.ToString("mm\\:ss");
+        }
+
+        if (fallback.HasValue)
+        {
+            var span = fallback.Value;
+            return span.TotalHours >= 1
+                ? span.ToString("hh\\:mm\\:ss")
+                : span.ToString("mm\\:ss");
+        }
+
+        return "—";
+    }
+
+    private static string FormatSwimPace(double? averageSpeedMetersPerSecond)
+    {
+        if (!averageSpeedMetersPerSecond.HasValue || averageSpeedMetersPerSecond.Value <= 0)
+        {
+            return "—";
+        }
+
+        var seconds = 100d / averageSpeedMetersPerSecond.Value;
+        var span = TimeSpan.FromSeconds(Math.Max(0, seconds));
+        return span.ToString("m\\:ss") + " /100m";
+    }
+
+    private static string FormatSwimNumber(double? value, string suffix = "", string format = "0.#")
+    {
+        return value.HasValue
+            ? string.Format(CultureInfo.CurrentCulture, "{0:" + format + "}{1}", value.Value, suffix)
+            : "—";
+    }
+
+    private static string FormatSwimInt(int? value)
+    {
+        return value.HasValue
+            ? value.Value.ToString("N0", CultureInfo.CurrentCulture)
+            : "—";
+    }
+
+    private static string FormatSwimPoolLength(double? length, string? unit)
+    {
+        if (!length.HasValue)
+        {
+            return "—";
+        }
+
+        var formattedLength = length.Value.ToString("0.#", CultureInfo.CurrentCulture);
+        return string.IsNullOrWhiteSpace(unit)
+            ? formattedLength + " m"
+            : formattedLength + " " + unit;
     }
 
     private static DateTime? ParseOptionalDateTime(string? value)

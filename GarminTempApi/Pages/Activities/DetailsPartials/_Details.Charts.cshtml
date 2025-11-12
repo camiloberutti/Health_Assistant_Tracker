@@ -21,8 +21,8 @@
 </style>
 
 <div class="row g-4 mb-4">
-    <div class="col-12 col-lg-4">
-        <div class="card shadow-sm visual-card h-100">
+    <div class="col-12">
+        <div class="card shadow-sm visual-card">
             <div class="card-header fw-semibold">Heart Rate</div>
             <div class="card-body">
                 <div class="chart-wrapper">
@@ -32,19 +32,8 @@
             </div>
         </div>
     </div>
-    <div class="col-12 col-lg-4">
-        <div class="card shadow-sm visual-card h-100">
-            <div class="card-header fw-semibold">Elevation Profile</div>
-            <div class="card-body">
-                <div class="chart-wrapper">
-                    <canvas id="chartAltitude"></canvas>
-                </div>
-                <p id="altitudeEmptyState" class="chart-empty text-muted small mb-0">No altitude readings available.</p>
-            </div>
-        </div>
-    </div>
-    <div class="col-12 col-lg-4">
-        <div class="card shadow-sm visual-card h-100">
+    <div class="col-12">
+        <div class="card shadow-sm visual-card">
             <div class="card-header fw-semibold">Average Pace</div>
             <div class="card-body">
                 <div class="chart-wrapper">
@@ -52,6 +41,17 @@
                 </div>
                 <p id="paceEmptyState" class="chart-empty text-muted small mb-0">Insufficient distance data to calculate
                     pace.</p>
+            </div>
+        </div>
+    </div>
+    <div class="col-12">
+        <div class="card shadow-sm visual-card">
+            <div class="card-header fw-semibold">Elevation Profile</div>
+            <div class="card-body">
+                <div class="chart-wrapper">
+                    <canvas id="chartAltitude"></canvas>
+                </div>
+                <p id="altitudeEmptyState" class="chart-empty text-muted small mb-0">No altitude readings available.</p>
             </div>
         </div>
     </div>
