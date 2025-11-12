@@ -1,5 +1,6 @@
 @page
 @using System
+@using System.Globalization
 @using System.Text.Json
 @model GarminTempApi.Pages.Activities.IndexModel
 @{
@@ -35,7 +36,7 @@
                 </div>
                 <div class="stat-card">
                     <div class="label">Last activity</div>
-                    <div class="value">@Model.Activities.FirstOrDefault()?.StartTime.ToLocalTime().ToString("MMM d") ?? "--"</div>
+                    <div class="value">@Model.LatestActivityDateDisplay</div>
                 </div>
             </div>
         </div>
@@ -55,13 +56,13 @@
             <form id="activityFilters" method="get" class="vstack gap-3">
                 <div>
                     <label class="form-label" for="filterStart">Start date</label>
-                    <input id="filterStart" name="StartDate" value="@Model.StartDate?.ToString("yyyy-MM-dd")" class="form-control"
-                        type="date" />
+                    <input id="filterStart" name="StartDate" value="@(Model.StartDate?.ToString("dd MMM yy", CultureInfo.InvariantCulture) ?? string.Empty)" class="form-control"
+                        type="text" inputmode="numeric" autocomplete="off" placeholder="dd mmm yy" />
                 </div>
                 <div>
                     <label class="form-label" for="filterEnd">End date</label>
-                    <input id="filterEnd" name="EndDate" value="@Model.EndDate?.ToString("yyyy-MM-dd")" class="form-control"
-                        type="date" />
+                    <input id="filterEnd" name="EndDate" value="@(Model.EndDate?.ToString("dd MMM yy", CultureInfo.InvariantCulture) ?? string.Empty)" class="form-control"
+                        type="text" inputmode="numeric" autocomplete="off" placeholder="dd mmm yy" />
                 </div>
                 <div>
                     <label class="form-label" for="filterType">Activity type</label>
@@ -69,8 +70,8 @@
                         <option value="">All types</option>
                         @foreach (var type in Model.ActivityTypes)
                         {
-                            <option value="@type" @(string.Equals(Model.ActivityType, type, StringComparison.OrdinalIgnoreCase) ?
-                                                              "selected" : null)>@type</option>
+                            <option value="@type.Value" @(string.Equals(Model.ActivityType, type.Value, StringComparison.OrdinalIgnoreCase) ?
+                                                              "selected" : null)>@type.Label</option>
                         }
                     </select>
                 </div>
@@ -220,50 +221,48 @@
 <script>
     (function () {
         const activities = @Html.Raw(JsonSerializer.Serialize(Model.Activities, serializerOptions));
+        const shortMonths = ['jan', 'feb', 'mar', 'apr', 'may', 'jun', 'jul', 'aug', 'sep', 'oct', 'nov', 'dec'];
 
-        const table = $('#activitiesTable').DataTable({
-            data: activities,
-            responsive: true,
-            order: [[0, 'desc']],
-            pageLength: 25,
-            columns: [
-                {
-                    data: 'startTime',
-                    render: function (data) {
-                        const date = new Date(data);
-                        return date.toLocaleDateString();
-                    }
-                },
-                {
-                    data: 'activityName',
-                    render: function (data) {
-                        return `<span class="activity-name" role="button" tabindex="0">${data}</span>`;
-                    }
-                },
-                { data: 'sport' },
-                {
-                    data: 'distanceMeters',
-                    render: function (meters) {
-                        if (!meters || Number.isNaN(meters)) {
-                            return '0.00';
-                        }
-                        return (meters / 1000).toFixed(2);
-                    }
-                },
-                {
-                    data: 'duration',
-                    render: function (value) {
-                        return value ?? '';
-                    }
-                },
-                {
-                    data: null,
-                    render: function (row) {
-                        return computeEffortMetric(row);
-                    }
-                }
-            ]
-        });
+        function formatShortDate(value) {
+            const date = new Date(value);
+            if (Number.isNaN(date.getTime())) {
+                return '';
+            }
+            return date.toLocaleDateString('en-GB', {
+                day: '2-digit',
+                month: 'short',
+                year: '2-digit'
+            }).replace(/,/g, '');
+        }
+
+        function parseShortDate(value) {
+            if (!value) {
+                return null;
+            }
+            const parts = value.trim().split(/\s+/);
+            if (parts.length !== 3) {
+                return null;
+            }
+
+            const day = Number.parseInt(parts[0], 10);
+            const monthIndex = shortMonths.indexOf(parts[1].toLowerCase());
+            let year = Number.parseInt(parts[2], 10);
+
+            if (!Number.isFinite(day) || day <= 0 || monthIndex < 0 || !Number.isFinite(year)) {
+                return null;
+            }
+
+            if (year < 100) {
+                year += 2000;
+            }
+
+            const utcDate = new Date(Date.UTC(year, monthIndex, day));
+            if (Number.isNaN(utcDate.getTime())) {
+                return null;
+            }
+
+            return new Date(utcDate.getUTCFullYear(), utcDate.getUTCMonth(), utcDate.getUTCDate());
+        }
 
         function computeEffortMetric(row) {
             const sport = (row.sport || '').toLowerCase();
@@ -301,6 +300,52 @@
             return '–';
         }
 
+        const table = $('#activitiesTable').DataTable({
+            data: activities,
+            responsive: true,
+            order: [[0, 'desc']],
+            pageLength: 25,
+            columns: [
+                {
+                    data: 'startTime',
+                    render: function (data, type) {
+                        if (type === 'sort' || type === 'type') {
+                            return data;
+                        }
+                        return formatShortDate(data);
+                    }
+                },
+                {
+                    data: 'activityName',
+                    render: function (data) {
+                        return `<span class="activity-name" role="button" tabindex="0">${data}</span>`;
+                    }
+                },
+                { data: 'sportDisplay' },
+                {
+                    data: 'distanceMeters',
+                    render: function (meters) {
+                        if (!meters || Number.isNaN(meters)) {
+                            return '0.00';
+                        }
+                        return (meters / 1000).toFixed(2);
+                    }
+                },
+                {
+                    data: 'duration',
+                    render: function (value) {
+                        return value ?? '';
+                    }
+                },
+                {
+                    data: null,
+                    render: function (row) {
+                        return computeEffortMetric(row);
+                    }
+                }
+            ]
+        });
+
         function applyFilters() {
             const startValue = $('#filterStart').val();
             const endValue = $('#filterEnd').val();
@@ -315,17 +360,20 @@
                 }
 
                 const startTime = new Date(rowData.startTime);
-
-                if (startValue) {
-                    const startDate = new Date(startValue + 'T00:00:00');
-                    if (startTime < startDate) {
-                        return false;
-                    }
+                if (Number.isNaN(startTime.getTime())) {
+                    return true;
                 }
 
-                if (endValue) {
-                    const endDate = new Date(endValue + 'T23:59:59');
-                    if (startTime > endDate) {
+                const startFilter = parseShortDate(startValue);
+                const endFilter = parseShortDate(endValue);
+
+                if (startFilter && startTime < startFilter) {
+                    return false;
+                }
+
+                if (endFilter) {
+                    const endBoundary = new Date(endFilter.getFullYear(), endFilter.getMonth(), endFilter.getDate(), 23, 59, 59, 999);
+                    if (startTime > endBoundary) {
                         return false;
                     }
                 }

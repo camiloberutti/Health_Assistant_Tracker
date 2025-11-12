@@ -1,0 +1,429 @@
+@model GarminTempApi.Pages.Activities.DetailsModel
+@using System.Globalization
+
+<style>
+    .swim-metric-card {
+        border: 1px solid var(--bs-border-color-translucent);
+        border-radius: 0.75rem;
+        background-color: var(--bs-body-bg);
+        padding: 1rem;
+    }
+
+    .swim-metric-card .metric-label {
+        text-transform: uppercase;
+        font-size: 0.75rem;
+        color: var(--bs-gray-600);
+        letter-spacing: 0.04em;
+        margin-bottom: 0.35rem;
+    }
+
+    .swim-metric-card .metric-value {
+        font-size: 1.35rem;
+        font-weight: 600;
+    }
+
+    .visual-card .chart-wrapper {
+        position: relative;
+        height: 280px;
+    }
+
+    .visual-card canvas {
+        width: 100% !important;
+        height: 100% !important;
+    }
+
+    .chart-empty {
+        display: none;
+    }
+
+    .chart-empty.active {
+        display: block;
+    }
+</style>
+
+@{
+    var swim = Model.SwimData;
+
+    string FormatDistance(double? meters)
+    {
+        if (!meters.HasValue)
+        {
+            return "—";
+        }
+
+        var value = meters.Value;
+        return value >= 1000
+        ? $"{value / 1000d:0.00} km"
+        : $"{value:0} m";
+    }
+
+    string FormatDuration(double? seconds)
+    {
+        if (!seconds.HasValue)
+        {
+            return "—";
+        }
+
+        var span = TimeSpan.FromSeconds(seconds.Value);
+        return span.TotalHours >= 1
+        ? span.ToString("hh\\:mm\\:ss")
+        : span.ToString("mm\\:ss");
+    }
+
+    string FormatPacePer100(double? avgSpeed)
+    {
+        if (!avgSpeed.HasValue || avgSpeed.Value <= 0)
+        {
+            return "—";
+        }
+
+        var seconds = 100d / avgSpeed.Value;
+        var span = TimeSpan.FromSeconds(seconds);
+        return span.ToString("m\\:ss") + " /100m";
+    }
+
+    string FormatNumber(double? value, string suffix = "", string format = "0.#")
+    {
+        return value.HasValue
+        ? $"{value.Value.ToString(format, CultureInfo.CurrentCulture)}{suffix}"
+        : "—";
+    }
+
+    string FormatInt(int? value)
+    {
+        return value.HasValue ? value.Value.ToString("N0") : "—";
+    }
+
+    string FormatPoolLength(double? length, string? unit)
+    {
+        if (!length.HasValue)
+        {
+            return "—";
+        }
+
+        return string.IsNullOrWhiteSpace(unit)
+        ? $"{length.Value:0.#} m"
+        : $"{length.Value:0.#} {unit}";
+    }
+
+    double? activityDistance = swim?.DistanceMeters ?? Model.Activity?.DistanceMeters;
+    var elapsedTime = swim?.DurationSeconds.HasValue == true
+    ? FormatDuration(swim.DurationSeconds)
+    : (Model.Activity?.Duration.ToString("hh\\:mm\\:ss") ?? "—");
+
+    var metricCards = new (string Label, string Value)[]
+    {
+("Distance", FormatDistance(activityDistance)),
+("Elapsed Time", elapsedTime),
+("Average Pace", FormatPacePer100(swim?.AverageSpeedMetersPerSecond)),
+("Average Heart Rate", FormatNumber(swim?.AverageHeartRate, " bpm", "0")),
+("Max Heart Rate", FormatNumber(swim?.MaxHeartRate, " bpm", "0")),
+("Calories", FormatNumber(swim?.Calories, " kcal", "0")),
+("Average Cadence", FormatNumber(swim?.AverageSwimCadence, " spm")),
+("Total Strokes", FormatInt(swim?.TotalStrokes)),
+("Average Stroke Distance", FormatNumber(swim?.AverageStrokeDistance, " m", "0.00")),
+("Average SWOLF", FormatNumber(swim?.AverageSwolf, string.Empty, "0")),
+("Pool Length", FormatPoolLength(swim?.PoolLength, swim?.PoolLengthUnit)),
+("Active Lengths", FormatInt(swim?.ActiveLengths)),
+("Fastest Lap", FormatDuration(swim?.FastestLapSeconds))
+    };
+}
+
+@if (swim is null)
+{
+    <div class="alert alert-info">Detailed swim metrics were not available for this activity.</div>
+}
+else
+{
+    <div class="row g-3 mb-4">
+        @foreach (var metric in metricCards)
+        {
+            <div class="col-12 col-sm-6 col-xl-4">
+                <div class="swim-metric-card h-100">
+                    <p class="metric-label mb-1">@metric.Label</p>
+                    <div class="metric-value">@metric.Value</div>
+                </div>
+            </div>
+        }
+    </div>
+}
+
+<div class="card shadow-sm visual-card">
+    <div class="card-header fw-semibold">Pace &amp; Heart Rate Timeline</div>
+    <div class="card-body">
+        <div class="chart-wrapper">
+            <canvas id="chartSwimPace"></canvas>
+        </div>
+        <p id="swimPaceEmpty" class="chart-empty text-muted small mb-0">No pace or heart rate samples recorded for this swim.</p>
+    </div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
+<script>
+    (function () {
+        const trackPoints = @Html.Raw(Model.VisualizationJson);
+        const rawLapData = @Html.Raw(Model.SwimLapJson);
+        const laps = Array.isArray(rawLapData) ? rawLapData : [];
+
+        const canvasPace = document.getElementById('chartSwimPace');
+        const emptyPace = document.getElementById('swimPaceEmpty');
+
+        window.activityVisualization = window.activityVisualization || {};
+        window.activityVisualization.rawPoints = Array.isArray(trackPoints) ? trackPoints : [];
+        window.activityVisualization.coordinatePoints = [];
+
+        const heartPoints = Array.isArray(window.activityVisualization.rawPoints)
+            ? window.activityVisualization.rawPoints.filter(p => typeof p.heartRate === 'number' && !Number.isNaN(p.heartRate))
+            : [];
+
+        if (typeof Chart === 'undefined') {
+            if (!Array.isArray(laps) || laps.length === 0) {
+                emptyPace?.classList.add('active');
+                canvasPace?.classList.add('d-none');
+            }
+            return;
+        }
+
+        const bodyStyles = window.getComputedStyle(document.body);
+        Chart.defaults.color = bodyStyles.getPropertyValue('--bs-body-color') || Chart.defaults.color;
+        Chart.defaults.font.family = bodyStyles.getPropertyValue('--bs-body-font-family') || Chart.defaults.font.family;
+
+        const formatTime = (seconds) => {
+            if (!Number.isFinite(seconds)) {
+                return '';
+            }
+            const rounded = Math.max(0, Math.round(seconds));
+            const minutes = Math.floor(rounded / 60);
+            const remaining = rounded % 60;
+            return `${minutes}:${remaining.toString().padStart(2, '0')}`;
+        };
+
+        const formatPace = (secondsPerHundred) => {
+            if (!Number.isFinite(secondsPerHundred)) {
+                return '';
+            }
+            const rounded = Math.max(0, Math.round(secondsPerHundred));
+            const minutes = Math.floor(rounded / 60);
+            const seconds = rounded % 60;
+            return `${minutes}:${seconds.toString().padStart(2, '0')} /100m`;
+        };
+
+        const buildPaceSegments = () => {
+            const lapLookup = new Map();
+            const lapEntries = laps.map((lap, index) => {
+                const lapIndex = typeof lap.lapIndex === 'number' && !Number.isNaN(lap.lapIndex)
+                    ? lap.lapIndex
+                    : index + 1;
+                lapLookup.set(lapIndex, lap);
+                return { lap, lapIndex };
+            });
+
+            const segments = [];
+            const restSpans = [];
+            let elapsed = 0;
+
+            lapEntries.forEach(({ lap, lapIndex }) => {
+                const moving = Math.max(0, Number(lap.movingDurationSeconds ?? 0));
+                const duration = Math.max(moving, Number(lap.durationSeconds ?? moving));
+                const rest = Math.max(0, Number(lap.restDurationSeconds ?? (duration - moving)));
+                const pace = typeof lap.paceSecondsPer100Meters === 'number' && !Number.isNaN(lap.paceSecondsPer100Meters)
+                    ? lap.paceSecondsPer100Meters
+                    : null;
+
+                if (pace !== null && moving > 0.01) {
+                    const start = elapsed;
+                    const end = start + moving;
+                    segments.push({ x: start, y: pace, lapIndex, type: 'active' });
+                    segments.push({ x: end, y: pace, lapIndex, type: 'active' });
+                    elapsed = end;
+                }
+                else {
+                    elapsed += moving;
+                }
+
+                if (rest > 0.01) {
+                    const restStart = elapsed;
+                    const restEnd = restStart + rest;
+                    segments.push({ x: restStart, y: null, lapIndex, type: 'rest' });
+                    segments.push({ x: restEnd, y: null, lapIndex, type: 'rest' });
+                    restSpans.push({ start: restStart, end: restEnd });
+                    elapsed = restEnd;
+                }
+            });
+
+            const hasActiveData = segments.some(point => Number.isFinite(point?.y));
+            return { segments, restSpans, lapLookup, hasActiveData };
+        };
+
+        const renderPaceChart = () => {
+            if (!canvasPace || !emptyPace) {
+                return;
+            }
+
+            const { segments, restSpans, lapLookup, hasActiveData } = buildPaceSegments();
+            const heartSeries = heartPoints
+                .filter(p => Number.isFinite(p.elapsedSeconds) && Number.isFinite(p.heartRate))
+                .map(p => ({ x: Number(p.elapsedSeconds), y: Number(p.heartRate) }));
+
+            if (!hasActiveData && heartSeries.length === 0) {
+                emptyPace.classList.add('active');
+                canvasPace.classList.add('d-none');
+                return;
+            }
+
+            emptyPace.classList.remove('active');
+            canvasPace.classList.remove('d-none');
+
+            const restHighlightPlugin = {
+                id: 'swimRestHighlight',
+                beforeDraw(chart) {
+                    if (!restSpans.length) {
+                        return;
+                    }
+
+                    const { ctx, chartArea, scales } = chart;
+                    const xScale = scales.x;
+                    if (!xScale) {
+                        return;
+                    }
+
+                    ctx.save();
+                    ctx.fillStyle = 'rgba(108,117,125,0.15)';
+                    restSpans.forEach(span => {
+                        const start = xScale.getPixelForValue(span.start);
+                        const end = xScale.getPixelForValue(span.end);
+                        ctx.fillRect(start, chartArea.top, end - start, chartArea.bottom - chartArea.top);
+                    });
+                    ctx.restore();
+                }
+            };
+
+            const datasets = [];
+            if (hasActiveData) {
+                datasets.push({
+                    label: 'Lap Pace (sec/100m)',
+                    data: segments,
+                    parsing: false,
+                    stepped: true,
+                    spanGaps: false,
+                    borderColor: '#0d6efd',
+                    backgroundColor: 'rgba(13,110,253,0.18)',
+                    radius: 0,
+                    pointHitRadius: 6,
+                    pointHoverRadius: 3,
+                    yAxisID: 'paceAxis'
+                });
+            }
+
+            if (heartSeries.length > 0) {
+                datasets.push({
+                    label: 'Heart Rate (bpm)',
+                    data: heartSeries,
+                    parsing: false,
+                    tension: 0.25,
+                    spanGaps: true,
+                    borderColor: '#dc3545',
+                    backgroundColor: 'rgba(220,53,69,0.15)',
+                    radius: 0,
+                    pointHitRadius: 4,
+                    pointHoverRadius: 4,
+                    yAxisID: 'heartAxis'
+                });
+            }
+
+            new Chart(canvasPace.getContext('2d'), {
+                type: 'line',
+                data: {
+                    datasets
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    parsing: false,
+                    interaction: { intersect: false, mode: 'nearest', axis: 'x' },
+                    plugins: {
+                        legend: { display: datasets.length > 1 },
+                        tooltip: {
+                            callbacks: {
+                                title: (items) => {
+                                    if (!items.length) {
+                                        return '';
+                                    }
+                                    return `Elapsed ${formatTime(items[0].parsed.x)}`;
+                                },
+                                label: (context) => {
+                                    if (context.dataset?.yAxisID === 'heartAxis') {
+                                        if (!Number.isFinite(context.parsed.y)) {
+                                            return '';
+                                        }
+                                        return `Heart rate: ${Math.round(context.parsed.y)} bpm`;
+                                    }
+
+                                    const raw = context.raw;
+                                    if (!raw || !Number.isFinite(context.parsed.y)) {
+                                        return 'Rest interval';
+                                    }
+
+                                    const lap = lapLookup.get(raw.lapIndex);
+                                    const lapNumber = Number.isFinite(raw.lapIndex)
+                                        ? raw.lapIndex
+                                        : (typeof lap?.lapIndex === 'number' && !Number.isNaN(lap.lapIndex) ? lap.lapIndex : undefined);
+                                    const lapLabel = lapNumber !== undefined ? `Lap ${lapNumber}` : 'Lap';
+                                    return `${lapLabel}: ${formatPace(context.parsed.y)}`;
+                                },
+                                afterLabel: (context) => {
+                                    const raw = context.raw;
+                                    if (!raw) {
+                                        return '';
+                                    }
+
+                                    const lap = lapLookup.get(raw.lapIndex);
+                                    if (!lap || !Number.isFinite(context.parsed.y)) {
+                                        return '';
+                                    }
+
+                                    const moving = Math.max(0, Number(lap.movingDurationSeconds ?? 0));
+                                    const rest = Math.max(0, Number(lap.restDurationSeconds ?? (Number(lap.durationSeconds ?? 0) - moving)));
+                                    const details = [`Moving: ${formatTime(moving)}`];
+                                    if (rest > 0.01) {
+                                        details.push(`Rest: ${formatTime(rest)}`);
+                                    }
+                                    return details.join('\n');
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'linear',
+                            title: { display: true, text: 'Elapsed Time' },
+                            ticks: {
+                                callback: (value) => formatTime(value)
+                            }
+                        },
+                        paceAxis: {
+                            type: 'linear',
+                            position: 'left',
+                            title: { display: true, text: 'Pace (per 100m)' },
+                            reverse: true,
+                            ticks: {
+                                callback: (value) => formatPace(value)
+                            }
+                        },
+                        heartAxis: {
+                            type: 'linear',
+                            position: 'right',
+                            title: { display: true, text: 'Heart Rate (bpm)' },
+                            grid: {
+                                drawOnChartArea: false
+                            }
+                        }
+                    }
+                },
+                plugins: hasActiveData && restSpans.length > 0 ? [restHighlightPlugin] : []
+            });
+        };
+
+        renderPaceChart();
+    })();
+</script>

@@ -3,6 +3,7 @@
 @using System.Linq
 @using System.Text.Json
 @using System.Text.Json.Serialization
+@using System.Globalization
 @{
     Layout = "_Layout";
 
@@ -163,7 +164,7 @@ else
                                 ? item.TotalSleepSeconds - item.SleepGoalSeconds.Value
                                 : (double?)null;
                                 <tr>
-                                    <td>@item.Date.ToString("yyyy-MM-dd")</td>
+                                    <td>@item.Date.ToString("dd MMM yy", CultureInfo.InvariantCulture)</td>
                                     <td>@FormatTimestamp(item.SleepStartLocal)</td>
                                     <td>@FormatTimestamp(item.SleepEndLocal)</td>
                                     <td>@FormatDuration(item.TotalSleepSeconds)</td>
@@ -504,7 +505,7 @@ else
 
     private static string FormatTimestamp(DateTime? timestamp)
     {
-        return timestamp.HasValue ? timestamp.Value.ToString("MMM dd HH:mm") : "--";
+        return timestamp.HasValue ? timestamp.Value.ToString("dd MMM yy HH:mm", CultureInfo.InvariantCulture) : "--";
     }
 
     private static string FormatNullable(double? value, string format)

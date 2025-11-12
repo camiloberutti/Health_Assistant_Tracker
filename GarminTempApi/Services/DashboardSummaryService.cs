@@ -118,7 +118,7 @@ public class DashboardSummaryService
         cards.Add(new DashboardCard(
             Title: "Steps",
             PrimaryValue: string.Format(CultureInfo.InvariantCulture, "{0:N0}", latest.TotalSteps),
-            PrimaryCaption: latest.Date.ToString("ddd, MMM d", CultureInfo.CurrentCulture),
+            PrimaryCaption: latest.Date.ToString("ddd, dd MMM yy", CultureInfo.InvariantCulture),
             Subtitle: subtitle,
             DestinationUrl: "/Steps",
             IconCss: "bi-shoe-prints",
@@ -176,7 +176,7 @@ public class DashboardSummaryService
         cards.Add(new DashboardCard(
             Title: "Sleep",
             PrimaryValue: FormatDuration(totalSleep),
-            PrimaryCaption: latest.Date.ToString("ddd night", CultureInfo.CurrentCulture),
+            PrimaryCaption: latest.Date.ToString("dd MMM yy", CultureInfo.InvariantCulture),
             Subtitle: latest.BodyBatteryChange is null
                 ? "Nightly recovery overview"
                 : string.Format(CultureInfo.InvariantCulture, "Body Battery {0:+#;-#;0}", latest.BodyBatteryChange.Value),
@@ -229,7 +229,7 @@ public class DashboardSummaryService
         cards.Add(new DashboardCard(
             Title: "Activities",
             PrimaryValue: BuildPrimaryActivityValue(latest.DistanceMeters, latest.Duration),
-            PrimaryCaption: latest.StartTime.ToLocalTime().ToString("ddd, MMM d", CultureInfo.CurrentCulture),
+            PrimaryCaption: latest.StartTime.ToLocalTime().ToString("ddd, dd MMM yy", CultureInfo.InvariantCulture),
             Subtitle: string.IsNullOrWhiteSpace(latest.ActivityType) ? "Most recent workout" : latest.ActivityType,
             DestinationUrl: "/Activities",
             IconCss: "bi-activity",

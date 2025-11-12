@@ -390,7 +390,7 @@ public class GarminConnectImporter
 
             var timestamp = ParsePolylineTime(coordinate);
 
-            target.Add(new GarminTrackPoint(timestamp, lat, lon, altitude, null));
+            target.Add(new GarminTrackPoint(timestamp, lat, lon, altitude, null, null));
         }
     }
 
@@ -541,6 +541,8 @@ public class GarminConnectImporter
         public double? Longitude { get; init; }
         public double? Altitude { get; init; }
         public double? HeartRate { get; init; }
+        [JsonPropertyName("distance")]
+        public double? DistanceMeters { get; init; }
 
         public GarminTrackPoint? ToTrackPoint()
         {
@@ -552,7 +554,7 @@ public class GarminConnectImporter
                 return null;
             }
 
-            return new GarminTrackPoint(timestamp, Latitude, Longitude, Altitude, HeartRate);
+            return new GarminTrackPoint(timestamp, Latitude, Longitude, Altitude, HeartRate, DistanceMeters);
         }
     }
 
@@ -783,7 +785,8 @@ public record GarminTrackPoint(
     double? Latitude,
     double? Longitude,
     double? Altitude,
-    double? HeartRate
+    double? HeartRate,
+    double? DistanceMeters
 );
 
 public record GarminActivityDetail(

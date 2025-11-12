@@ -7,11 +7,11 @@
     var status = Model.Status;
     string FormatDate(DateTime? value)
     {
-        return value is null ? "--" : value.Value.ToLocalTime().ToString("MMM d, yyyy");
+    return value is null ? "--" : value.Value.ToLocalTime().ToString("dd MMM yy", CultureInfo.InvariantCulture);
     }
     string FormatDateTime(DateTime? value)
     {
-        return value is null ? "--" : value.Value.ToLocalTime().ToString("MMM d, yyyy HH:mm");
+    return value is null ? "--" : value.Value.ToLocalTime().ToString("dd MMM yy HH:mm", CultureInfo.InvariantCulture);
     }
     string FormatDateOnly(DateOnly? value)
     {
@@ -21,7 +21,7 @@
         }
 
         var asDateTime = value.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
-        return asDateTime.ToString("dddd, MMM d", CultureInfo.CurrentCulture);
+    return asDateTime.ToString("dddd, dd MMM yy", CultureInfo.InvariantCulture);
     }
 }
 

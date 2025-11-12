@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading.Tasks;
 using GarminTempApi.Data;
@@ -167,7 +168,7 @@ public class IndexModel : PageModel
 
         var points = subset
             .Select(row => new SleepChartPoint(
-                row.Date.ToString("MMM dd"),
+                row.Date.ToString("dd MMM", CultureInfo.InvariantCulture),
                 row.TotalSleepSeconds,
                 row.DeepSleepSeconds,
                 row.LightSleepSeconds,
@@ -232,7 +233,7 @@ public class IndexModel : PageModel
 
         var points = relevantGroups
             .Select(group => new SleepChartPoint(
-                $"{group.Start:MMM dd} - {group.End:MMM dd}",
+                string.Format(CultureInfo.InvariantCulture, "{0:dd MMM} - {1:dd MMM}", group.Start, group.End),
                 group.Items.Average(item => item.TotalSleepSeconds),
                 group.Items.Average(item => item.DeepSleepSeconds),
                 group.Items.Average(item => item.LightSleepSeconds),
@@ -293,7 +294,7 @@ public class IndexModel : PageModel
             {
                 var items = group.ToList();
                 return new SleepChartPoint(
-                    group.Key.ToString("MMM yyyy"),
+                    group.Key.ToString("MMM yy", CultureInfo.InvariantCulture),
                     items.Average(item => item.TotalSleepSeconds),
                     items.Average(item => item.DeepSleepSeconds),
                     items.Average(item => item.LightSleepSeconds),

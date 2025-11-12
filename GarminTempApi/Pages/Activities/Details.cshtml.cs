@@ -19,6 +19,7 @@ public class DetailsModel : PageModel
     private const string PartialBase = "/Pages/Activities/DetailsPartials/";
     private const string MapPartial = PartialBase + "_Details.MapAndCharts.cshtml";
     private const string IndoorPartial = PartialBase + "_Details.Indoor.cshtml";
+    private const string SwimPartial = PartialBase + "_Details.Swim.cshtml";
 
     private static readonly Dictionary<string, string> ActivityTemplateOverrides = new(StringComparer.OrdinalIgnoreCase)
     {
@@ -30,7 +31,9 @@ public class DetailsModel : PageModel
         ["indoor_running"] = IndoorPartial,
         ["treadmill_running"] = IndoorPartial,
         ["elliptical"] = IndoorPartial,
-        ["meditation"] = IndoorPartial
+        ["meditation"] = IndoorPartial,
+        ["lap_swimming"] = SwimPartial,
+        ["pool_swimming"] = SwimPartial
     };
 
     private static readonly JsonSerializerOptions VisualizationJsonOptions = new(JsonSerializerDefaults.Web)
@@ -53,6 +56,10 @@ public class DetailsModel : PageModel
     public IReadOnlyList<VisualizationPoint> VisualizationPoints { get; private set; } = Array.Empty<VisualizationPoint>();
     public string VisualizationJson { get; private set; } = "[]";
     public string DetailPartial { get; private set; } = MapPartial;
+    public bool IsSwimActivity { get; private set; }
+    public SwimInsights? SwimData { get; private set; }
+    public string SwimLapJson { get; private set; } = "[]";
+    public string ActivityDisplayType { get; private set; } = string.Empty;
 
     public async Task<IActionResult> OnGetAsync(string? id)
     {
@@ -82,6 +89,11 @@ public class DetailsModel : PageModel
             return NotFound();
         }
 
+        var normalizedType = NormalizeActivityType(Activity.ActivityType);
+        IsSwimActivity = string.Equals(normalizedType, "lap_swimming", StringComparison.OrdinalIgnoreCase)
+            || string.Equals(normalizedType, "pool_swimming", StringComparison.OrdinalIgnoreCase);
+        ActivityDisplayType = ToDisplayLabel(Activity.ActivityType);
+
         DetailPartial = ResolveDetailPartial(Activity.ActivityType);
 
         TrackPoints = await _db.ActivityPoints
@@ -90,10 +102,7 @@ public class DetailsModel : PageModel
             .OrderBy(p => p.Timestamp)
             .ToListAsync();
 
-        TrackPointCount = TrackPoints.Count;
-        VisualizationPoints = BuildVisualizationPoints(TrackPoints);
-        HasGeoTrack = VisualizationPoints.Any(p => p.Latitude.HasValue && p.Longitude.HasValue);
-        VisualizationJson = JsonSerializer.Serialize(VisualizationPoints, VisualizationJsonOptions);
+        var visualizationPoints = BuildVisualizationPoints(TrackPoints);
 
         var detailJson = await _db.ActivityDetailSnapshots
             .AsNoTracking()
@@ -108,10 +117,42 @@ public class DetailsModel : PageModel
             if (Detail is { } detail)
             {
                 SummaryMetrics = BuildSummaryMetrics(detail);
+                if (IsSwimActivity && SummaryMetrics.Count > 0)
+                {
+                    var duplicateLabels = new HashSet<string>(StringComparer.OrdinalIgnoreCase)
+                    {
+                        "Calories",
+                        "Distance",
+                        "Elapsed",
+                        "Average HR",
+                        "Max HR"
+                    };
+
+                    SummaryMetrics = SummaryMetrics
+                        .Where(metric => !duplicateLabels.Contains(metric.Label))
+                        .ToList();
+                }
                 JsonBlocks = BuildJsonBlocks(detail);
                 DetailErrors = detail.Errors ?? new Dictionary<string, string>();
+                if (visualizationPoints.Count == 0 && detail.TrackPoints is { Count: > 0 } detailTrack)
+                {
+                    visualizationPoints = BuildVisualizationPoints(detailTrack);
+                }
+                if (IsSwimActivity)
+                {
+                    SwimData = ExtractSwimInsights(detail, Activity?.StartTime);
+                    if (SwimData is { Laps.Count: > 0 })
+                    {
+                        SwimLapJson = JsonSerializer.Serialize(SwimData.Laps, VisualizationJsonOptions);
+                    }
+                }
             }
         }
+
+        VisualizationPoints = visualizationPoints;
+        TrackPointCount = VisualizationPoints.Count;
+        HasGeoTrack = VisualizationPoints.Any(p => p.Latitude.HasValue && p.Longitude.HasValue);
+        VisualizationJson = JsonSerializer.Serialize(VisualizationPoints, VisualizationJsonOptions);
 
         return Page();
     }
@@ -154,6 +195,49 @@ public class DetailsModel : PageModel
             return Array.Empty<VisualizationPoint>();
         }
 
+        var snapshots = points
+            .OrderBy(p => p.Timestamp)
+            .Select(p => new TrackPointSnapshot(
+                EnsureUtc(p.Timestamp),
+                p.Latitude,
+                p.Longitude,
+                p.Altitude,
+                p.HeartRate,
+                null))
+            .ToList();
+
+        return BuildVisualizationPointsCore(snapshots);
+    }
+
+    private static IReadOnlyList<VisualizationPoint> BuildVisualizationPoints(IReadOnlyList<GarminTrackPoint> points)
+    {
+        if (points is null || points.Count == 0)
+        {
+            return Array.Empty<VisualizationPoint>();
+        }
+
+        var snapshots = points
+            .Where(p => p.Timestamp.HasValue)
+            .OrderBy(p => p.Timestamp!.Value)
+            .Select(p => new TrackPointSnapshot(
+                EnsureUtc(p.Timestamp!.Value),
+                p.Latitude,
+                p.Longitude,
+                p.Altitude,
+                p.HeartRate,
+                p.DistanceMeters))
+            .ToList();
+
+        return BuildVisualizationPointsCore(snapshots);
+    }
+
+    private static IReadOnlyList<VisualizationPoint> BuildVisualizationPointsCore(IReadOnlyList<TrackPointSnapshot> points)
+    {
+        if (points.Count == 0)
+        {
+            return Array.Empty<VisualizationPoint>();
+        }
+
         var firstTimestamp = points[0].Timestamp;
         var results = new List<VisualizationPoint>(points.Count);
 
@@ -163,25 +247,37 @@ public class DetailsModel : PageModel
 
         foreach (var point in points)
         {
-            if (lastLat.HasValue && lastLon.HasValue)
+            var usedDistanceMeters = false;
+
+            if (point.DistanceMeters.HasValue)
             {
-                cumulativeDistanceKm += CalculateHaversineDistance(lastLat.Value, lastLon.Value, point.Latitude, point.Longitude);
+                var distanceKm = Math.Max(0, point.DistanceMeters.Value / 1000d);
+                cumulativeDistanceKm = Math.Max(cumulativeDistanceKm, distanceKm);
+                usedDistanceMeters = true;
             }
 
-            lastLat = point.Latitude;
-            lastLon = point.Longitude;
+            if (point.Latitude.HasValue && point.Longitude.HasValue)
+            {
+                if (!usedDistanceMeters && lastLat.HasValue && lastLon.HasValue)
+                {
+                    cumulativeDistanceKm += CalculateHaversineDistance(lastLat.Value, lastLon.Value, point.Latitude.Value, point.Longitude.Value);
+                }
+
+                lastLat = point.Latitude;
+                lastLon = point.Longitude;
+            }
+            else
+            {
+                lastLat = null;
+                lastLon = null;
+            }
 
             var elapsedSeconds = (point.Timestamp - firstTimestamp).TotalSeconds;
             var pace = cumulativeDistanceKm > 0
                 ? (elapsedSeconds / 60d) / cumulativeDistanceKm
                 : (double?)null;
 
-            var localTimestamp = point.Timestamp.Kind switch
-            {
-                DateTimeKind.Utc => point.Timestamp.ToLocalTime(),
-                DateTimeKind.Unspecified => DateTime.SpecifyKind(point.Timestamp, DateTimeKind.Local),
-                _ => point.Timestamp
-            };
+            var timeLabel = FormatElapsedLabel(elapsedSeconds);
 
             results.Add(new VisualizationPoint(
                 point.Timestamp,
@@ -192,10 +288,28 @@ public class DetailsModel : PageModel
                 cumulativeDistanceKm,
                 elapsedSeconds,
                 pace,
-                localTimestamp.ToString("T", CultureInfo.CurrentCulture)));
+                timeLabel));
         }
 
         return results;
+    }
+
+    private static string FormatElapsedLabel(double elapsedSeconds)
+    {
+        var duration = TimeSpan.FromSeconds(Math.Max(0, elapsedSeconds));
+        return duration.TotalHours >= 1
+            ? duration.ToString("hh\\:mm\\:ss")
+            : duration.ToString("mm\\:ss");
+    }
+
+    private static DateTime EnsureUtc(DateTime value)
+    {
+        return value.Kind switch
+        {
+            DateTimeKind.Utc => value,
+            DateTimeKind.Local => value.ToUniversalTime(),
+            _ => DateTime.SpecifyKind(value, DateTimeKind.Utc)
+        };
     }
 
     private static double CalculateHaversineDistance(double lat1, double lon1, double lat2, double lon2)
@@ -253,16 +367,284 @@ public class DetailsModel : PageModel
             AddMetric(metrics, "Elevation Gain", summaryDto, "elevationGain", element => FormatNumber(element, suffix: " m"));
         }
 
-        if (root.TryGetProperty("activityTypeDTO", out var typeDto) && typeDto.TryGetProperty("typeKey", out var typeKey))
+        return metrics;
+    }
+
+    private static SwimInsights? ExtractSwimInsights(GarminActivityDetail detail, DateTime? activityStartTime)
+    {
+        if (string.IsNullOrWhiteSpace(detail.SummaryJson))
         {
-            var typeLabel = typeKey.GetString();
-            if (!string.IsNullOrWhiteSpace(typeLabel))
+            return null;
+        }
+
+        using var document = JsonDocument.Parse(detail.SummaryJson);
+        var root = document.RootElement;
+        if (!root.TryGetProperty("summaryDTO", out var summaryDto))
+        {
+            return null;
+        }
+
+        DateTime? summaryStartUtc = null;
+        if (summaryDto.TryGetProperty("startTimeGMT", out var startGmtElement) && startGmtElement.ValueKind == JsonValueKind.String)
+        {
+            summaryStartUtc = ParseOptionalDateTime(startGmtElement.GetString());
+        }
+
+        double? GetDouble(string property) => summaryDto.TryGetProperty(property, out var element) && element.TryGetDouble(out var value)
+            ? value
+            : null;
+
+        int? GetInt(string property)
+        {
+            if (!summaryDto.TryGetProperty(property, out var element))
             {
-                metrics.Add(("Type", typeLabel));
+                return null;
+            }
+
+            if (element.ValueKind == JsonValueKind.Null || element.ValueKind == JsonValueKind.Undefined)
+            {
+                return null;
+            }
+
+            if (element.TryGetInt32(out var intValue))
+            {
+                return intValue;
+            }
+
+            return element.TryGetDouble(out var doubleValue)
+                ? (int?)Convert.ToInt32(Math.Round(doubleValue))
+                : null;
+        }
+
+        string? GetString(string property)
+        {
+            if (!summaryDto.TryGetProperty(property, out var element) || element.ValueKind is JsonValueKind.Null or JsonValueKind.Undefined)
+            {
+                return null;
+            }
+
+            return element.ValueKind switch
+            {
+                JsonValueKind.String => element.GetString(),
+                JsonValueKind.Number => element.TryGetDouble(out var numeric)
+                    ? numeric.ToString(CultureInfo.InvariantCulture)
+                    : element.GetRawText(),
+                JsonValueKind.Object => element.TryGetProperty("unitKey", out var unitKey) && unitKey.ValueKind == JsonValueKind.String
+                    ? unitKey.GetString()
+                    : element.GetRawText(),
+                _ => element.GetRawText()
+            };
+        }
+
+        var startUtc = summaryStartUtc ?? ParseOptionalDateTime(summaryDto.TryGetProperty("startTimeLocal", out var localStart) && localStart.ValueKind == JsonValueKind.String ? localStart.GetString() : null);
+
+        IReadOnlyList<SwimLap> laps = Array.Empty<SwimLap>();
+        foreach (var candidate in new[] { detail.TypedSplitsJson, detail.SplitsJson, detail.DetailsJson })
+        {
+            if (string.IsNullOrWhiteSpace(candidate))
+            {
+                continue;
+            }
+
+            laps = ExtractSwimLaps(candidate, startUtc, activityStartTime);
+            if (laps.Count > 0)
+            {
+                break;
             }
         }
 
-        return metrics;
+        var distanceMeters = GetDouble("distance");
+        var durationSeconds = GetDouble("duration");
+        var averageSpeed = GetDouble("averageSpeed");
+        var averageHeartRate = GetDouble("averageHR");
+        var maxHeartRate = GetDouble("maxHR");
+        var calories = GetDouble("calories");
+        var averageSwimCadence = GetDouble("averageSwimCadence");
+        var averageStrokeDistance = GetDouble("averageStrokeDistance");
+        var averageSwolf = GetDouble("averageSWOLF");
+        var poolLength = GetDouble("poolLength");
+        var poolLengthUnit = GetString("unitOfPoolLength");
+        var activeLengths = GetInt("numberOfActiveLengths");
+        var totalStrokes = GetInt("totalNumberOfStrokes");
+        var fastestLapSeconds = GetDouble("minActivityLapDuration");
+
+        if ((!averageStrokeDistance.HasValue || averageStrokeDistance.Value <= 0.0001)
+            && totalStrokes.HasValue && totalStrokes.Value > 0
+            && distanceMeters.HasValue && distanceMeters.Value > 0)
+        {
+            averageStrokeDistance = distanceMeters.Value / totalStrokes.Value;
+        }
+
+        return new SwimInsights(
+            distanceMeters,
+            durationSeconds,
+            averageSpeed,
+            averageHeartRate,
+            maxHeartRate,
+            calories,
+            averageSwimCadence,
+            averageStrokeDistance,
+            averageSwolf,
+            poolLength,
+            poolLengthUnit,
+            activeLengths,
+            totalStrokes,
+            fastestLapSeconds,
+            laps);
+    }
+
+    private static IReadOnlyList<SwimLap> ExtractSwimLaps(string? detailsJson, DateTime? summaryStartUtc, DateTime? activityStartTime)
+    {
+        if (string.IsNullOrWhiteSpace(detailsJson))
+        {
+            return Array.Empty<SwimLap>();
+        }
+
+        try
+        {
+            using var document = JsonDocument.Parse(detailsJson);
+            var root = document.RootElement;
+
+            JsonElement lapsElement;
+            if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("splits", out var splitsElement) && splitsElement.ValueKind == JsonValueKind.Object && splitsElement.TryGetProperty("lapDTOs", out var nestedLapElement) && nestedLapElement.ValueKind == JsonValueKind.Array)
+            {
+                lapsElement = nestedLapElement;
+            }
+            else if (root.ValueKind == JsonValueKind.Object && root.TryGetProperty("lapDTOs", out var directLapElement) && directLapElement.ValueKind == JsonValueKind.Array)
+            {
+                lapsElement = directLapElement;
+            }
+            else
+            {
+                return Array.Empty<SwimLap>();
+            }
+
+            DateTime? referenceStart = summaryStartUtc;
+            if (!referenceStart.HasValue && activityStartTime.HasValue)
+            {
+                referenceStart = EnsureUtc(activityStartTime.Value);
+            }
+
+            if (!referenceStart.HasValue)
+            {
+                foreach (var lapCandidate in lapsElement.EnumerateArray())
+                {
+                    if (lapCandidate.TryGetProperty("startTimeGMT", out var startElement) && startElement.ValueKind == JsonValueKind.String)
+                    {
+                        referenceStart = ParseOptionalDateTime(startElement.GetString());
+                        if (referenceStart.HasValue)
+                        {
+                            break;
+                        }
+                    }
+                }
+            }
+
+            var laps = new List<SwimLap>();
+            double fallbackStart = 0;
+
+            foreach (var lapElement in lapsElement.EnumerateArray())
+            {
+                var lapIndex = lapElement.TryGetProperty("lapIndex", out var lapIndexElement) && lapIndexElement.TryGetInt32(out var parsedIndex)
+                    ? parsedIndex
+                    : laps.Count + 1;
+
+                double duration = lapElement.TryGetProperty("duration", out var durationElement) && durationElement.TryGetDouble(out var parsedDouble)
+                    ? parsedDouble
+                    : 0d;
+
+                double movingDuration = lapElement.TryGetProperty("movingDuration", out var movingElement) && movingElement.TryGetDouble(out parsedDouble)
+                    ? parsedDouble
+                    : duration;
+
+                if (movingDuration <= 0 && lapElement.TryGetProperty("sumMovingDuration", out var sumMovingElement) && sumMovingElement.TryGetDouble(out parsedDouble))
+                {
+                    movingDuration = parsedDouble;
+                }
+
+                double distance = lapElement.TryGetProperty("distance", out var distanceElement) && distanceElement.TryGetDouble(out parsedDouble)
+                    ? parsedDouble
+                    : 0d;
+
+                if (distance <= 0 && lapElement.TryGetProperty("sumDistance", out var sumDistanceElement) && sumDistanceElement.TryGetDouble(out parsedDouble))
+                {
+                    distance = parsedDouble;
+                }
+
+                var lapStartUtc = lapElement.TryGetProperty("startTimeGMT", out var startElement) && startElement.ValueKind == JsonValueKind.String
+                    ? ParseOptionalDateTime(startElement.GetString())
+                    : null;
+
+                double startOffsetSeconds;
+                if (lapStartUtc.HasValue && referenceStart.HasValue)
+                {
+                    startOffsetSeconds = Math.Max(0, (lapStartUtc.Value - referenceStart.Value).TotalSeconds);
+                    fallbackStart = startOffsetSeconds;
+                }
+                else
+                {
+                    startOffsetSeconds = fallbackStart;
+                }
+
+                double restDuration = Math.Max(0, duration - movingDuration);
+                bool isRestLap = (distance <= 0.05 && movingDuration <= 0.1) || movingDuration <= 0.1;
+
+                double? paceSecondsPer100 = null;
+                var movingForPace = movingDuration > 0 ? movingDuration : duration;
+                if (!isRestLap && distance > 0.01 && movingForPace > 0.01)
+                {
+                    paceSecondsPer100 = movingForPace / (distance / 100d);
+                }
+
+                double? avgHr = lapElement.TryGetProperty("averageHR", out var avgHrElement) && avgHrElement.TryGetDouble(out parsedDouble)
+                    ? parsedDouble
+                    : null;
+
+                double? maxHr = lapElement.TryGetProperty("maxHR", out var maxHrElement) && maxHrElement.TryGetDouble(out parsedDouble)
+                    ? parsedDouble
+                    : null;
+
+                laps.Add(new SwimLap(
+                    lapIndex,
+                    startOffsetSeconds,
+                    duration,
+                    movingDuration,
+                    restDuration,
+                    distance,
+                    isRestLap,
+                    paceSecondsPer100,
+                    avgHr,
+                    maxHr));
+
+                fallbackStart = startOffsetSeconds + duration;
+            }
+
+            return laps;
+        }
+        catch (JsonException)
+        {
+            return Array.Empty<SwimLap>();
+        }
+    }
+
+    private static DateTime? ParseOptionalDateTime(string? value)
+    {
+        if (string.IsNullOrWhiteSpace(value))
+        {
+            return null;
+        }
+
+        if (DateTime.TryParse(value, CultureInfo.InvariantCulture, DateTimeStyles.AdjustToUniversal | DateTimeStyles.AssumeUniversal, out var parsed))
+        {
+            if (parsed.Kind == DateTimeKind.Unspecified)
+            {
+                parsed = DateTime.SpecifyKind(parsed, DateTimeKind.Utc);
+            }
+
+            return parsed.Kind == DateTimeKind.Utc ? parsed : parsed.ToUniversalTime();
+        }
+
+        return null;
     }
 
     private static void AddMetric(List<(string Label, string Value)> metrics, string label, JsonElement parent, string propertyName, Func<JsonElement, string>? formatter = null)
@@ -367,4 +749,61 @@ public class DetailsModel : PageModel
         string TimeLabel);
 
     public sealed record DetailJsonBlock(string Title, string Json);
+
+    public sealed record SwimInsights(
+        double? DistanceMeters,
+        double? DurationSeconds,
+        double? AverageSpeedMetersPerSecond,
+        double? AverageHeartRate,
+        double? MaxHeartRate,
+        double? Calories,
+        double? AverageSwimCadence,
+        double? AverageStrokeDistance,
+        double? AverageSwolf,
+        double? PoolLength,
+        string? PoolLengthUnit,
+        int? ActiveLengths,
+        int? TotalStrokes,
+        double? FastestLapSeconds,
+        IReadOnlyList<SwimLap> Laps);
+
+    public sealed record SwimLap(
+        int LapIndex,
+        double StartOffsetSeconds,
+        double DurationSeconds,
+        double MovingDurationSeconds,
+        double RestDurationSeconds,
+        double DistanceMeters,
+        bool IsRest,
+        double? PaceSecondsPer100Meters,
+        double? AverageHeartRate,
+        double? MaxHeartRate);
+
+    private sealed record TrackPointSnapshot(
+        DateTime Timestamp,
+        double? Latitude,
+        double? Longitude,
+        double? Altitude,
+        double? HeartRate,
+        double? DistanceMeters);
+
+    private static string ToDisplayLabel(string? rawType)
+    {
+        if (string.IsNullOrWhiteSpace(rawType))
+        {
+            return "Activity";
+        }
+
+        var cleaned = rawType
+            .Replace('-', ' ')
+            .Replace('_', ' ')
+            .Trim();
+
+        if (cleaned.Length == 0)
+        {
+            return "Activity";
+        }
+
+        return CultureInfo.CurrentCulture.TextInfo.ToTitleCase(cleaned);
+    }
 }

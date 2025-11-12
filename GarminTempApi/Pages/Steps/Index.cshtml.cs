@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
@@ -156,7 +157,7 @@ public class IndexModel : PageModel
     private static StepRangePeriod BuildSingleDayPeriod(StepRow day)
     {
         var points = BuildHourlySeries(day);
-        var label = day.Date.ToString("ddd, MMM dd");
+        var label = day.Date.ToString("ddd, dd MMM", CultureInfo.InvariantCulture);
         var subtitle = "Cumulative steps by hour";
         return CreatePeriod(
             periodKey: day.Date.ToString("yyyyMMdd"),
@@ -191,7 +192,7 @@ public class IndexModel : PageModel
             if (subset.Count > 0)
             {
                 var points = BuildDailyPoints(subset);
-                var label = $"{periodStart:MMM dd} - {currentEnd:MMM dd}";
+                var label = string.Format(CultureInfo.InvariantCulture, "{0:dd MMM} - {1:dd MMM}", periodStart, currentEnd);
                 var subtitle = subset.Count < 7 ? $"Contains {subset.Count} day{(subset.Count == 1 ? string.Empty : "s")}" : "Daily totals";
                 periods.Add(CreatePeriod(
                     periodKey: $"{periodStart:yyyyMMdd}-{currentEnd:yyyyMMdd}",
@@ -214,7 +215,7 @@ public class IndexModel : PageModel
         return subset
             .OrderBy(r => r.Date)
             .Select(r => new StepChartPoint(
-                r.Date.ToString("MMM dd"),
+                r.Date.ToString("dd MMM", CultureInfo.InvariantCulture),
                 r.TotalSteps,
                 r.GoalSteps,
                 r.TotalDistanceKm,
@@ -247,7 +248,7 @@ public class IndexModel : PageModel
             if (subset.Count > 0)
             {
                 var points = BuildWeeklyPoints(subset);
-                var label = $"{periodStart:MMM dd} - {currentWeekEnd:MMM dd}";
+                var label = string.Format(CultureInfo.InvariantCulture, "{0:dd MMM} - {1:dd MMM}", periodStart, currentWeekEnd);
                 var subtitle = "Weekly averages";
                 periods.Add(CreatePeriod(
                     periodKey: $"{periodStart:yyyyMMdd}-{currentWeekEnd:yyyyMMdd}",
@@ -289,7 +290,7 @@ public class IndexModel : PageModel
                 var averageTotalCalories = items.Average(r => r.TotalCalories);
 
                 return new StepChartPoint(
-                    $"{g.Key:MMM dd} - {g.Key.AddDays(6):MMM dd}",
+                    string.Format(CultureInfo.InvariantCulture, "{0:dd MMM} - {1:dd MMM}", g.Key, g.Key.AddDays(6)),
                     averageSteps,
                     averageGoal,
                     averageDistance,
@@ -324,7 +325,7 @@ public class IndexModel : PageModel
             if (subset.Count > 0)
             {
                 var points = BuildMonthlyPoints(subset);
-                var label = $"{periodStart:MMM yyyy} - {currentMonthEnd:MMM yyyy}";
+                var label = string.Format(CultureInfo.InvariantCulture, "{0:MMM yy} - {1:MMM yy}", periodStart, currentMonthEnd);
                 var subtitle = "Monthly averages per day";
                 periods.Add(CreatePeriod(
                     periodKey: $"{periodStart:yyyyMM}-{currentMonthEnd:yyyyMM}",
@@ -360,7 +361,7 @@ public class IndexModel : PageModel
             {
                 var items = g.ToList();
                 return new StepChartPoint(
-                    g.Key.ToString("MMM yyyy"),
+                    g.Key.ToString("MMM yy", CultureInfo.InvariantCulture),
                     items.Average(r => r.TotalSteps),
                     items.Average(r => r.GoalSteps),
                     items.Average(r => r.TotalDistanceKm),

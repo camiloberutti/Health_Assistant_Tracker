@@ -1,9 +1,11 @@
 @page "{id}"
 @using System
+@using System.Globalization
 @model GarminTempApi.Pages.Activities.DetailsModel
 @{
     Layout = "_Layout";
     var activity = Model.Activity!;
+    var activityLocalStart = activity.StartTime.ToLocalTime();
 }
 
 <style>
@@ -26,12 +28,12 @@
     <div>
         <h2 class="mb-1">@activity.Name</h2>
         <p class="activity-meta mb-0">
-            @activity.StartTime.ToLocalTime().ToString("f") · @(activity.DistanceMeters / 1000.0).ToString("0.00") km ·
+            @activityLocalStart.ToString("dd MMM yy HH:mm", CultureInfo.InvariantCulture) · @(activity.DistanceMeters / 1000.0).ToString("0.00") km ·
             @activity.Duration.ToString(@"hh\:mm\:ss")
         </p>
     </div>
     <div class="activity-badges d-flex gap-2">
-        <span class="badge bg-primary-subtle text-primary-emphasis text-uppercase">@activity.ActivityType</span>
+    <span class="badge bg-primary-subtle text-primary-emphasis text-uppercase">@Model.ActivityDisplayType</span>
         <span class="badge bg-secondary-subtle text-secondary-emphasis">Source: @activity.Source</span>
         <span class="badge bg-light text-muted">ID: @activity.ExternalId</span>
     </div>
@@ -39,7 +41,7 @@
 
 @if (Model.Detail?.FetchedAtUtc is DateTime fetchedAtUtc)
 {
-    <p class="text-muted small mb-4">Detailed data fetched @fetchedAtUtc.ToLocalTime().ToString("f").</p>
+    <p class="text-muted small mb-4">Detailed data fetched @fetchedAtUtc.ToLocalTime().ToString("dd MMM yy HH:mm", CultureInfo.InvariantCulture).</p>
 }
 
 <a class="btn btn-outline-secondary btn-sm mb-4" href="/Activities">&larr; Back to activities</a>
@@ -59,7 +61,7 @@
 
 @if (Model.SummaryMetrics.Count > 0)
 {
-    <h3 class="mt-4">Garmin Summary</h3>
+    <h3 class="mt-4">@Model.ActivityDisplayType Summary</h3>
     <div class="row g-3 mb-4">
         @foreach (var metric in Model.SummaryMetrics)
         {

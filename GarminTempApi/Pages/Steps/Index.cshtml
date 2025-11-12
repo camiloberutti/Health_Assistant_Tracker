@@ -2,6 +2,7 @@
 @model GarminTempApi.Pages.Steps.IndexModel
 @using System.Text.Json
 @using System.Linq
+@using System.Globalization
 @{
     ViewData["Title"] = "Steps";
     var rangeOrder = new[] { "1d", "7d", "4w", "1y" };
@@ -33,7 +34,7 @@
         {
             <div class="border rounded-3 p-3 bg-body-tertiary">
                 <div class="text-uppercase small text-muted">Latest day</div>
-                <div class="fw-semibold">@latest.Date.ToString("ddd, MMM dd")</div>
+                <div class="fw-semibold">@latest.Date.ToString("ddd, dd MMM yy", CultureInfo.InvariantCulture)</div>
                 <div class="small text-muted">
                     @latest.TotalSteps.ToString("N0") steps &bull; goal @latest.GoalSteps.ToString("N0") &bull; @latest.TotalDistanceKm.ToString("0.0") km
                 </div>

@@ -152,6 +152,7 @@ def _extract_trackpoints_from_tcx(raw_bytes: bytes) -> List[Dict[str, Any]]:
             "./{*}LongitudeDegrees") if pos_el is not None else None
 
         alt_el = tp.find("./{*}AltitudeMeters")
+        distance_el = tp.find("./{*}DistanceMeters")
         hr_el = tp.find("./{*}HeartRateBpm/{*}Value")
 
         entry: Dict[str, Any] = {
@@ -160,6 +161,7 @@ def _extract_trackpoints_from_tcx(raw_bytes: bytes) -> List[Dict[str, Any]]:
             "longitude": _safe_float(lon.text) if lon is not None else None,
             "altitude": _safe_float(alt_el.text) if alt_el is not None else None,
             "heartRate": _safe_float(hr_el.text) if hr_el is not None else None,
+            "distance": _safe_float(distance_el.text) if distance_el is not None else None,
         }
 
         if entry["timestamp"] is None and entry["latitude"] is None and entry["longitude"] is None:

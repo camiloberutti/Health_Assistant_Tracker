@@ -2,6 +2,7 @@
 @model GarminTempApi.Pages.Sleep.TodayModel
 @using System.Text.Json
 @using System.Text.Json.Serialization
+@using System.Globalization
 @{
     Layout = "_Layout";
 
@@ -17,7 +18,7 @@
     var nextUrl = Model.NextDate.HasValue
         ? Url.Page("/Sleep/Today", new { date = Model.NextDate.Value.ToString("yyyy-MM-dd") })
         : null;
-    var selectedDateText = Model.SelectedDate?.ToString("dd MMM yyyy");
+    var selectedDateText = Model.SelectedDate?.ToString("dd MMM yy", CultureInfo.InvariantCulture);
     var detailJson = Model.Entry == null
         ? "null"
         : JsonSerializer.Serialize(new
@@ -348,7 +349,7 @@ else
                                         stacked: true,
                                         time: {
                                             displayFormats: { minute: 'h:mm a' },
-                                            tooltipFormat: 'MMM d, h:mm a'
+                                            tooltipFormat: 'dd MMM yy, h:mm a'
                                         },
                                         ticks: {
                                             autoSkip: true,
