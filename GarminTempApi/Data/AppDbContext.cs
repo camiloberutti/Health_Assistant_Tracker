@@ -13,6 +13,7 @@ namespace GarminTempApi.Data
         public DbSet<SleepDetailSnapshot> SleepDetailSnapshots { get; set; }
         public DbSet<StepSummary> StepSummaries { get; set; }
         public DbSet<ActivityDetailSnapshot> ActivityDetailSnapshots { get; set; }
+        public DbSet<RecommendationFeedback> RecommendationFeedback { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -48,6 +49,9 @@ namespace GarminTempApi.Data
             modelBuilder.Entity<SleepDetailSnapshot>()
                 .HasIndex(s => s.Date)
                 .IsUnique();
+
+            modelBuilder.Entity<RecommendationFeedback>()
+                .HasIndex(f => f.SubmittedUtc);
         }
     }
 }

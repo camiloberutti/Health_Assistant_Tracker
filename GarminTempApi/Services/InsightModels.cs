@@ -39,3 +39,41 @@ public record UserDailyStat(
     double? RestingHeartRate,
     IReadOnlyList<string> ActivityTypes
 );
+
+public record WeeklyHealthSnapshot(
+    DateOnly RangeStart,
+    DateOnly RangeEnd,
+    WeeklyStepSummary Steps,
+    WeeklySleepSummary Sleep,
+    WeeklyRestSummary RestDays,
+    IReadOnlyList<WeeklyActivitySummary> Activities,
+    double? TotalCaloriesBurned
+);
+
+public record WeeklyStepSummary(
+    IReadOnlyList<WeeklyStepDay> Daily,
+    double TotalDistanceKm,
+    double? AverageSteps
+);
+
+public record WeeklyStepDay(DateOnly Date, double Steps);
+
+public record WeeklySleepSummary(
+    double? AverageHours,
+    double? DeepSleepHours,
+    double? RemSleepHours,
+    double? AverageSleepScore
+);
+
+public record WeeklyRestSummary(
+    int Total,
+    int ActiveRest,
+    int CompleteRest
+);
+
+public record WeeklyActivitySummary(
+    string Type,
+    double? DistanceKm,
+    double? DurationMinutes,
+    string Intensity
+);

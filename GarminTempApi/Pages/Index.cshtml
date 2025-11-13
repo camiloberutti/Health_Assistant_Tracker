@@ -4,6 +4,7 @@
 @using System
 @using System.Globalization
 @using System.Linq
+@using Markdig
 @{
     Layout = "_Layout";
     string FormatDateTime(DateTime? value)
@@ -21,24 +22,60 @@
         return asDateTime.ToString("dddd, dd MMM yy", CultureInfo.InvariantCulture);
     }
 
-    string[] SplitRecommendation(string? recommendation)
+    string RenderRecommendationHtml(string? recommendation)
     {
         if (string.IsNullOrWhiteSpace(recommendation))
         {
-            return Array.Empty<string>();
+            return string.Empty;
         }
 
-        return recommendation
-        .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
-        .Select(line => line.Trim())
-        .Where(line => line.Length > 0)
-        .ToArray();
+        var pipeline = new MarkdownPipelineBuilder()
+            .UseSoftlineBreakAsHardlineBreak()
+            .Build();
+
+        return Markdown.ToHtml(recommendation, pipeline);
     }
 }
 
 <div class="py-5 text-center">
     <h1>Welcome to your Health Tracker app</h1>
 </div>
+
+<section class="mb-5">
+    <div class="card shadow-sm border-0 insights-card">
+        <div class="card-body d-flex flex-column gap-3">
+            <div class="d-flex justify-content-end">
+                <span class="insights-icon text-primary">
+                    <i class="bi-stars"></i>
+                </span>
+            </div>
+            @{
+                var recommendationHtml = RenderRecommendationHtml(Model.DailyRecommendation);
+            }
+            @if (!string.IsNullOrEmpty(recommendationHtml))
+            {
+                <div class="insights-content text-muted">
+                    @Html.Raw(recommendationHtml)
+                </div>
+            }
+            else if (!string.IsNullOrWhiteSpace(Model.DailyRecommendationError))
+            {
+                <p class="text-muted mb-0">@Model.DailyRecommendationError</p>
+            }
+            else
+            {
+                <p class="text-muted mb-0">Daily recommendations will appear once your latest data syncs.</p>
+            }
+
+            <div class="d-flex flex-wrap align-items-center gap-2 insights-feedback mt-2">
+                <span class="text-muted small">Was this helpful?</span>
+                <button type="button" class="btn btn-outline-success btn-sm" data-feedback="true">Yes</button>
+                <button type="button" class="btn btn-outline-secondary btn-sm" data-feedback="false">Needs work</button>
+                <span id="insightsFeedbackStatus" class="text-muted small"></span>
+            </div>
+        </div>
+    </div>
+</section>
 
 @if (Model.Summary?.Cards?.Count > 0)
 {
@@ -115,42 +152,6 @@ else
     <div class="alert alert-info">Sync your Garmin data to unlock dashboard highlights.</div>
 }
 
-<section class="mb-5">
-    <div class="card shadow-sm border-0 insights-card">
-        <div class="card-body d-flex flex-column gap-3">
-            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
-                <div>
-                    <div class="text-uppercase small text-muted">Today's Recommendation</div>
-                    <h2 class="h5 mb-0">Personalized Guidance</h2>
-                </div>
-                <span class="insights-icon text-primary">
-                    <i class="bi-stars"></i>
-                </span>
-            </div>
-            @{
-                var recommendationLines = SplitRecommendation(Model.DailyRecommendation);
-            }
-            @if (recommendationLines.Length > 0)
-            {
-                <div class="insights-content text-muted">
-                    @foreach (var line in recommendationLines)
-                    {
-                        <p class="mb-2">@line</p>
-                    }
-                </div>
-            }
-            else if (!string.IsNullOrWhiteSpace(Model.DailyRecommendationError))
-            {
-                <p class="text-muted mb-0">@Model.DailyRecommendationError</p>
-            }
-            else
-            {
-                <p class="text-muted mb-0">Daily recommendations will appear once your latest data syncs.</p>
-            }
-        </div>
-    </div>
-</section>
-
 <style>
     .dashboard-card-link {
         text-decoration: none;
@@ -216,3 +217,49 @@ else
         margin-bottom: 0;
     }
 </style>
+
+<script>
+    (function () {
+        const container = document.querySelector('.insights-feedback');
+        if (!container) {
+            return;
+        }
+
+        const statusEl = document.getElementById('insightsFeedbackStatus');
+        const buttons = Array.from(container.querySelectorAll('button[data-feedback]'));
+
+        container.addEventListener('click', async (event) => {
+            const button = event.target.closest('button[data-feedback]');
+            if (!button) {
+                return;
+            }
+
+            const helpful = button.dataset.feedback === 'true';
+            buttons.forEach(b => b.disabled = true);
+            if (statusEl) {
+                statusEl.textContent = 'Sending feedback...';
+            }
+
+            try {
+                const response = await fetch('/api/insights/feedback', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ helpful })
+                });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+
+                if (statusEl) {
+                    statusEl.textContent = helpful ? 'Thanks! We will keep it up.' : 'Thanks! We will fine-tune your tips.';
+                }
+            } catch (err) {
+                if (statusEl) {
+                    statusEl.textContent = 'Unable to send feedback right now. Please try again later.';
+                }
+                buttons.forEach(b => b.disabled = false);
+            }
+        });
+    })();
+</script>

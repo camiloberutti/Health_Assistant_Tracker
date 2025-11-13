@@ -117,6 +117,13 @@ using (var scope = app.Services.CreateScope())
             DetailJson TEXT NOT NULL,
             LastUpdatedUtc TEXT NOT NULL
         );");
+    db.Database.ExecuteSqlRaw(@"CREATE TABLE IF NOT EXISTS RecommendationFeedback (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            SubmittedUtc TEXT NOT NULL,
+            Helpful INTEGER NOT NULL,
+            FocusArea TEXT NULL,
+            Notes TEXT NULL
+        );");
     EnsureSleepSummaryColumns(db.Database.GetDbConnection());
 
     var loggerFactory = scope.ServiceProvider.GetRequiredService<ILoggerFactory>();

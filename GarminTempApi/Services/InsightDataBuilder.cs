@@ -120,6 +120,115 @@ public class InsightDataBuilder
             AverageRestingHeartRate: averageRestingHeartRate);
     }
 
+    public async Task<WeeklyHealthSnapshot> BuildWeeklyHealthSnapshotAsync(DateTime targetDate, int lookbackDays = 7, CancellationToken cancellationToken = default)
+    {
+        if (lookbackDays <= 0)
+        {
+            throw new ArgumentOutOfRangeException(nameof(lookbackDays), "Lookback days must be positive.");
+        }
+
+        var endDate = DateOnly.FromDateTime(targetDate.Date);
+        var startDate = endDate.AddDays(-lookbackDays + 1);
+
+        var dayRange = Enumerable.Range(0, lookbackDays)
+            .Select(offset => startDate.AddDays(offset))
+            .ToArray();
+
+        var stepSummaries = await _dbContext.StepSummaries
+            .Where(s => s.Date >= startDate.ToDateTime(TimeOnly.MinValue) && s.Date <= endDate.ToDateTime(TimeOnly.MinValue))
+            .Select(s => new { s.Date, s.TotalSteps, s.TotalDistanceMeters, s.TotalCalories })
+            .ToListAsync(cancellationToken);
+
+        var sleepSummaries = await _dbContext.SleepSummaries
+            .Where(s => s.Date >= startDate.ToDateTime(TimeOnly.MinValue) && s.Date <= endDate.ToDateTime(TimeOnly.MinValue))
+            .ToListAsync(cancellationToken);
+
+        var activities = await _dbContext.Activities
+            .Where(a => a.StartTime >= startDate.ToDateTime(TimeOnly.MinValue) && a.StartTime <= endDate.ToDateTime(TimeOnly.MaxValue))
+            .Select(a => new ActivityProjection
+            {
+                Date = a.StartTime,
+                DistanceMeters = a.DistanceMeters,
+                DurationTicks = a.Duration.Ticks,
+                ActivityType = a.ActivityType
+            })
+            .ToListAsync(cancellationToken);
+
+        var dailySteps = dayRange.ToDictionary(d => d, _ => 0d);
+        var dailyActiveMinutes = dayRange.ToDictionary(d => d, _ => 0d);
+
+        foreach (var step in stepSummaries)
+        {
+            var date = DateOnly.FromDateTime(step.Date);
+            if (dailySteps.ContainsKey(date))
+            {
+                dailySteps[date] = step.TotalSteps;
+            }
+        }
+
+        foreach (var activity in activities)
+        {
+            var date = DateOnly.FromDateTime(activity.Date);
+            if (dailyActiveMinutes.ContainsKey(date))
+            {
+                dailyActiveMinutes[date] += TimeSpan.FromTicks(activity.DurationTicks).TotalMinutes;
+            }
+        }
+
+        var stepDays = dayRange
+            .Select(day => new WeeklyStepDay(day, dailySteps[day]))
+            .ToList();
+
+        var totalDistanceKm = stepSummaries.Sum(s => s.TotalDistanceMeters) / 1000d;
+        double? averageSteps = stepDays.Count == 0 ? null : stepDays.Average(d => d.Steps);
+
+        var totalCalories = stepSummaries.Sum(s => s.TotalCalories);
+
+        double? AverageSeconds(Func<SleepSummary, double> selector)
+        {
+            var values = sleepSummaries.Select(selector).Where(v => v > 0).ToList();
+            return values.Count == 0 ? null : values.Average();
+        }
+
+        var averageSleepSeconds = AverageSeconds(s => s.TotalSleepSeconds);
+        var deepSleepSeconds = AverageSeconds(s => s.DeepSleepSeconds);
+        var remSleepSeconds = AverageSeconds(s => s.RemSleepSeconds);
+
+        double? averageSleepScore = sleepSummaries
+            .Select(s => s.SleepScore)
+            .Where(s => s.HasValue)
+            .Select(s => s!.Value)
+            .DefaultIfEmpty()
+            .Average();
+
+        if (sleepSummaries.All(s => !s.SleepScore.HasValue))
+        {
+            averageSleepScore = null;
+        }
+
+        var restSummary = ClassifyRestDays(stepDays, dailyActiveMinutes);
+
+        var activitySummaries = activities
+            .Select(BuildWeeklyActivitySummary)
+            .ToList();
+
+        return new WeeklyHealthSnapshot(
+            RangeStart: startDate,
+            RangeEnd: endDate,
+            Steps: new WeeklyStepSummary(
+                Daily: stepDays,
+                TotalDistanceKm: totalDistanceKm,
+                AverageSteps: averageSteps),
+            Sleep: new WeeklySleepSummary(
+                AverageHours: ConvertSecondsToHours(averageSleepSeconds),
+                DeepSleepHours: ConvertSecondsToHours(deepSleepSeconds),
+                RemSleepHours: ConvertSecondsToHours(remSleepSeconds),
+                AverageSleepScore: averageSleepScore),
+            RestDays: restSummary,
+            Activities: activitySummaries,
+            TotalCaloriesBurned: totalCalories > 0 ? totalCalories : null);
+    }
+
     public DailyRecommendationContext BuildDailyRecommendationContext(DateTime targetDate, UserDataDigest digest, int lookbackDays = 7)
     {
         if (lookbackDays <= 0)
@@ -170,6 +279,92 @@ public class InsightDataBuilder
             .ToList();
 
         return filtered.Count == 0 ? null : filtered.Average();
+    }
+
+    private static WeeklyRestSummary ClassifyRestDays(IReadOnlyList<WeeklyStepDay> steps, IReadOnlyDictionary<DateOnly, double> activeMinutes)
+    {
+        const double ActiveRestStepThreshold = 6000;
+        const double CompleteRestStepThreshold = 1500;
+        const double ActiveRestMinutesThreshold = 45;
+        const double CompleteRestMinutesThreshold = 15;
+
+        var activeRest = 0;
+        var completeRest = 0;
+
+        foreach (var day in steps)
+        {
+            var stepsValue = day.Steps;
+            var minutes = activeMinutes.TryGetValue(day.Date, out var value) ? value : 0d;
+
+            var isCompleteRest = stepsValue < CompleteRestStepThreshold && minutes < CompleteRestMinutesThreshold;
+            if (isCompleteRest)
+            {
+                completeRest++;
+                continue;
+            }
+
+            var isRestDay = stepsValue < ActiveRestStepThreshold && minutes < ActiveRestMinutesThreshold;
+            if (isRestDay)
+            {
+                activeRest++;
+            }
+        }
+
+        return new WeeklyRestSummary(
+            Total: activeRest + completeRest,
+            ActiveRest: activeRest,
+            CompleteRest: completeRest);
+    }
+
+    private static WeeklyActivitySummary BuildWeeklyActivitySummary(ActivityProjection activity)
+    {
+        var durationMinutes = TimeSpan.FromTicks(activity.DurationTicks).TotalMinutes;
+        var distanceKm = activity.DistanceMeters > 0 ? activity.DistanceMeters / 1000d : (double?)null;
+        var type = string.IsNullOrWhiteSpace(activity.ActivityType) ? "Unknown" : activity.ActivityType.Trim();
+        var intensity = ClassifyIntensity(type, distanceKm, durationMinutes);
+
+        return new WeeklyActivitySummary(
+            Type: type,
+            DistanceKm: distanceKm,
+            DurationMinutes: durationMinutes > 0 ? durationMinutes : null,
+            Intensity: intensity);
+    }
+
+    private static string ClassifyIntensity(string activityType, double? distanceKm, double durationMinutes)
+    {
+        var normalizedType = activityType.ToLowerInvariant();
+
+        if (normalizedType.Contains("yoga") || normalizedType.Contains("stretch") || normalizedType.Contains("meditation"))
+        {
+            return "low";
+        }
+
+        if (normalizedType.Contains("strength") || normalizedType.Contains("hiit") || normalizedType.Contains("interval"))
+        {
+            return durationMinutes >= 20 ? "high" : "moderate";
+        }
+
+        if (durationMinutes >= 60 || (distanceKm.HasValue && distanceKm.Value >= 12))
+        {
+            return "high";
+        }
+
+        if (durationMinutes >= 30 || (distanceKm.HasValue && distanceKm.Value >= 5))
+        {
+            return "moderate";
+        }
+
+        return "low";
+    }
+
+    private static double? ConvertSecondsToHours(double? seconds)
+    {
+        if (!seconds.HasValue)
+        {
+            return null;
+        }
+
+        return seconds.Value <= 0 ? 0 : seconds.Value / 3600d;
     }
 
     private sealed class DailyAccumulator

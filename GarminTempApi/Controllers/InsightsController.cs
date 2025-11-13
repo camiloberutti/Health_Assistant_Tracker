@@ -4,6 +4,8 @@ using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
 using System.Threading.Tasks;
+using GarminTempApi.Data;
+using GarminTempApi.Models;
 using GarminTempApi.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -16,11 +18,16 @@ namespace GarminTempApi.Controllers
     public class InsightsController : ControllerBase
     {
         private readonly IOpenAiInsightService _insightService;
+        private readonly AppDbContext _dbContext;
         private readonly ILogger<InsightsController> _logger;
 
-        public InsightsController(IOpenAiInsightService insightService, ILogger<InsightsController> logger)
+        public InsightsController(
+            IOpenAiInsightService insightService,
+            AppDbContext dbContext,
+            ILogger<InsightsController> logger)
         {
             _insightService = insightService;
+            _dbContext = dbContext;
             _logger = logger;
         }
 
@@ -32,6 +39,11 @@ namespace GarminTempApi.Controllers
             [property: JsonPropertyName("prompt")] string? Prompt,
             [property: JsonPropertyName("messages")] IReadOnlyList<ChatMessageDto>? Messages,
             [property: JsonPropertyName("context")] JsonElement? Context);
+
+        public record FeedbackRequest(
+            [property: JsonPropertyName("helpful")] bool? Helpful,
+            [property: JsonPropertyName("focusArea")] string? FocusArea,
+            [property: JsonPropertyName("notes")] string? Notes);
 
         [HttpGet("daily")]
         public async Task<IActionResult> GetDailyRecommendation(CancellationToken cancellationToken)
@@ -111,6 +123,28 @@ namespace GarminTempApi.Controllers
                 _logger.LogError(ex, "Unexpected failure while processing insight query.");
                 return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to process query." });
             }
+        }
+
+        [HttpPost("feedback")]
+        public async Task<IActionResult> SubmitFeedbackAsync([FromBody] FeedbackRequest request, CancellationToken cancellationToken)
+        {
+            if (request is null || request.Helpful is null)
+            {
+                return BadRequest(new { error = "Helpful flag is required." });
+            }
+
+            var entity = new RecommendationFeedback
+            {
+                SubmittedUtc = DateTime.UtcNow,
+                Helpful = request.Helpful.Value,
+                FocusArea = string.IsNullOrWhiteSpace(request.FocusArea) ? null : request.FocusArea.Trim(),
+                Notes = string.IsNullOrWhiteSpace(request.Notes) ? null : request.Notes.Trim()
+            };
+
+            _dbContext.RecommendationFeedback.Add(entity);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            return Ok(new { id = entity.Id });
         }
     }
 }

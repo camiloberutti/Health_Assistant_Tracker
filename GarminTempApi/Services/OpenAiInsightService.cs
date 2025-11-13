@@ -25,7 +25,15 @@ public class OpenAiInsightService : IOpenAiInsightService
         WriteIndented = false
     };
 
-    private const string DefaultSystemPrompt = "You are a supportive Garmin coach. Use the provided metrics to deliver concise, actionable insights and recommendations. Be honest about missing data and avoid inventing numbers.";
+    private const string DefaultSystemPrompt = @"
+You are a knowledgeable health expert. 
+Your task is to provide clear, actionable, and precise health insights based on the user's recent activity, sleep, and recovery patterns. 
+Do not provide generic advice such as 'sleep between 7-9 hours.' 
+Instead, suggest if the user should sleep earlier or later, based on their specific sleep data and activity levels.
+For example, if the user has had several low-intensity days, recommend an increase in activity, or if they've been sedentary, suggest a more active rest day. 
+If the user has had consistent low sleep quality, suggest adjustments to improve recovery based on their activity level.
+Always consider the user's specific metrics, and provide insights that are actionable, precise, and avoid repetition.
+Be honest about missing data and avoid inventing numbers.";
 
     private readonly InsightDataBuilder _dataBuilder;
     private readonly IOptionsMonitor<OpenAiOptions> _optionsMonitor;
@@ -51,32 +59,38 @@ public class OpenAiInsightService : IOpenAiInsightService
     {
         var options = GetValidatedOptions();
 
+        // Build user data for the past week
         var digest = await _dataBuilder.BuildUserDataDigestAsync(targetDate.Date.AddDays(-13), targetDate.Date, cancellationToken);
         var recommendationContext = _dataBuilder.BuildDailyRecommendationContext(targetDate, digest);
+        var weeklySnapshot = await _dataBuilder.BuildWeeklyHealthSnapshotAsync(targetDate, 7, cancellationToken);
 
         var payload = new
         {
             type = "daily-recommendation",
             targetDate = targetDate.Date,
             dailyContext = recommendationContext,
+            weeklySummary = weeklySnapshot,
             digest
         };
 
         var userContent = new StringBuilder();
-        userContent.AppendLine("Please craft a short, motivating plan for the user.");
-        userContent.AppendLine("Keep the answer under 140 words, use markdown with a heading and bullet points.");
-        userContent.AppendLine("Focus on a balance between training, recovery, and lifestyle.");
+        userContent.AppendLine("Please craft a personalized, actionable recommendation for the user based on the data.");
+        userContent.AppendLine("Keep the answer under 150 words, and use markdown with bullet points.");
+        userContent.AppendLine("Avoid using the phrase 'Personalized Health recommendation' anywhere in the response.");
+        userContent.AppendLine("Provide specific recommendations on sleep, activity, and rest days. Be specific: suggest whether the user should sleep earlier, how much activity they need, or if they need more rest.");
+        userContent.AppendLine("Incorporate the following context based on the weekly snapshot: sleep quality, step count, and intensity of activities.");
         userContent.AppendLine("Context:");
         userContent.AppendLine(JsonSerializer.Serialize(payload, SerializerOptions));
 
         var messages = new List<object>
-        {
-            BuildMessage("system", DefaultSystemPrompt),
-            BuildMessage("user", userContent.ToString())
-        };
+    {
+        BuildMessage("system", DefaultSystemPrompt),
+        BuildMessage("user", userContent.ToString())
+    };
 
         return await SendChatCompletionAsync(options, messages, cancellationToken);
     }
+
 
     public async Task<string> RunChatQueryAsync(IReadOnlyList<InsightChatMessage> messages, CancellationToken cancellationToken)
     {
