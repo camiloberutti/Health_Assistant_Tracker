@@ -3,16 +3,12 @@
 @using GarminTempApi.Services
 @using System
 @using System.Globalization
+@using System.Linq
 @{
     Layout = "_Layout";
-    var status = Model.Status;
-    string FormatDate(DateTime? value)
-    {
-    return value is null ? "--" : value.Value.ToLocalTime().ToString("dd MMM yy", CultureInfo.InvariantCulture);
-    }
     string FormatDateTime(DateTime? value)
     {
-    return value is null ? "--" : value.Value.ToLocalTime().ToString("dd MMM yy HH:mm", CultureInfo.InvariantCulture);
+        return value is null ? "--" : value.Value.ToLocalTime().ToString("dd MMM yy HH:mm", CultureInfo.InvariantCulture);
     }
     string FormatDateOnly(DateOnly? value)
     {
@@ -22,25 +18,37 @@
         }
 
         var asDateTime = value.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
-    return asDateTime.ToString("dddd, dd MMM yy", CultureInfo.InvariantCulture);
+        return asDateTime.ToString("dddd, dd MMM yy", CultureInfo.InvariantCulture);
+    }
+
+    string[] SplitRecommendation(string? recommendation)
+    {
+        if (string.IsNullOrWhiteSpace(recommendation))
+        {
+            return Array.Empty<string>();
+        }
+
+        return recommendation
+        .Split(new[] { '\r', '\n' }, StringSplitOptions.RemoveEmptyEntries)
+        .Select(line => line.Trim())
+        .Where(line => line.Length > 0)
+        .ToArray();
     }
 }
 
 <div class="py-5 text-center">
-    <h1>Welcome to App Garmin</h1>
-    <p class="lead">Quick access to your activities, sleep and steps. Use the nav to go to a page.</p>
-    <p><a class="btn btn-primary" href="/Activities">View Activities</a></p>
+    <h1>Welcome to your Health Tracker app</h1>
 </div>
 
 @if (Model.Summary?.Cards?.Count > 0)
 {
     <section class="mb-5">
         <div class="d-flex align-items-baseline justify-content-between mb-3 flex-wrap gap-2">
-            <h2 class="h4 mb-0">Daily Highlights</h2>
+            <h2 class="h4 mb-0">Your day</h2>
             <div class="text-muted small d-flex flex-wrap gap-2">
                 @if (Model.Summary.LatestDataDate is not null)
                 {
-                    <span>Data through @FormatDateOnly(Model.Summary.LatestDataDate)</span>
+                    <span>@FormatDateOnly(Model.Summary.LatestDataDate)</span>
                 }
                 <span>Updated @FormatDateTime(Model.Summary.GeneratedUtc)</span>
             </div>
@@ -65,9 +73,14 @@
                                         @if (string.Equals(card.IconCss, "icon-steps", StringComparison.OrdinalIgnoreCase))
                                         {
                                             <svg class="icon-steps" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
-                                                <path d="M4.75 13.75V11.5c0-1.8 1.45-3.25 3.25-3.25h1.15c.63 0 1.22-.3 1.59-.82l1.34-1.85a2 2 0 011.63-.83h1.25c.77 0 1.49.37 1.94.99l1.12 1.57a3.5 3.5 0 001.86 1.29l2.34.64c.88.24 1.53 1.04 1.53 1.95V14a3.5 3.5 0 01-3.5 3.5H6.75a2 2 0 01-2-2Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-                                                <path d="M5.5 16.5H17.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
-                                                <path d="M9.5 11.5h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                                                <path
+                                                    d="M4.75 13.75V11.5c0-1.8 1.45-3.25 3.25-3.25h1.15c.63 0 1.22-.3 1.59-.82l1.34-1.85a2 2 0 011.63-.83h1.25c.77 0 1.49.37 1.94.99l1.12 1.57a3.5 3.5 0 001.86 1.29l2.34.64c.88.24 1.53 1.04 1.53 1.95V14a3.5 3.5 0 01-3.5 3.5H6.75a2 2 0 01-2-2Z"
+                                                    fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+                                                    stroke-linejoin="round" />
+                                                <path d="M5.5 16.5H17.5" fill="none" stroke="currentColor" stroke-width="1.6"
+                                                    stroke-linecap="round" stroke-linejoin="round" />
+                                                <path d="M9.5 11.5h3" fill="none" stroke="currentColor" stroke-width="1.6"
+                                                    stroke-linecap="round" />
                                             </svg>
                                         }
                                         else
@@ -102,61 +115,41 @@ else
     <div class="alert alert-info">Sync your Garmin data to unlock dashboard highlights.</div>
 }
 
-@if (status is not null)
-{
-    <div class="row justify-content-center mb-5">
-        <div class="col-lg-8 col-xl-6">
-            <div class="card shadow-sm">
-                <div class="card-body">
-                    <div class="d-flex align-items-center justify-content-between mb-3">
-                        <h5 class="mb-0">Data Readiness</h5>
-                        <span class="badge @(status.IsReady ? "bg-success" : "bg-warning text-dark")">@(status.IsReady ? "Ready" : "Needs attention")</span>
-                    </div>
-
-                    <div class="form-check form-switch mb-3">
-                        <input class="form-check-input" type="checkbox" role="switch" id="data-ready-switch" disabled @(status.IsReady ? "checked" : null)>
-                        <label class="form-check-label fw-semibold" for="data-ready-switch">All datasets loaded</label>
-                    </div>
-
-                    <p class="text-muted small mb-4">
-                        @(status.IsReady
-                            ? "Activities, sleep, and steps are available."
-                            : $"Waiting on {(status.MissingComponents.Count == 0 ? "datasets" : string.Join(", ", status.MissingComponents))} to finish syncing.")
-                    </p>
-
-                    <div class="vstack gap-3">
-                        <div class="d-flex align-items-start gap-3">
-                            <input class="form-check-input mt-1" type="checkbox" id="activities-ready" disabled @(status.HasActivities ? "checked" : null)>
-                            <div>
-                                <label class="form-check-label fw-semibold" for="activities-ready">Activities</label>
-                                <div class="text-muted small">Entries: @status.ActivityCount.ToString("N0") &middot; Latest: @FormatDateTime(status.LatestActivityStart)</div>
-                            </div>
-                        </div>
-
-                        <div class="d-flex align-items-start gap-3">
-                            <input class="form-check-input mt-1" type="checkbox" id="sleep-ready" disabled @(status.HasSleepSummaries ? "checked" : null)>
-                            <div>
-                                <label class="form-check-label fw-semibold" for="sleep-ready">Sleep summaries</label>
-                                <div class="text-muted small">Nights: @status.SleepSummaryCount.ToString("N0") &middot; Latest: @FormatDate(status.LatestSleepDate)</div>
-                                <div class="text-muted small">Detailed segments: @status.SleepDetailCount.ToString("N0")</div>
-                            </div>
-                        </div>
-
-                        <div class="d-flex align-items-start gap-3">
-                            <input class="form-check-input mt-1" type="checkbox" id="steps-ready" disabled @(status.HasStepSummaries ? "checked" : null)>
-                            <div>
-                                <label class="form-check-label fw-semibold" for="steps-ready">Step summaries</label>
-                                <div class="text-muted small">Days: @status.StepSummaryCount.ToString("N0") &middot; Latest: @FormatDate(status.LatestStepDate)</div>
-                            </div>
-                        </div>
-                    </div>
-
-                    <div class="text-muted small mt-4">Status generated @FormatDateTime(status.GeneratedUtc).</div>
+<section class="mb-5">
+    <div class="card shadow-sm border-0 insights-card">
+        <div class="card-body d-flex flex-column gap-3">
+            <div class="d-flex flex-wrap align-items-start justify-content-between gap-3">
+                <div>
+                    <div class="text-uppercase small text-muted">Today's Recommendation</div>
+                    <h2 class="h5 mb-0">Personalized Guidance</h2>
                 </div>
+                <span class="insights-icon text-primary">
+                    <i class="bi-stars"></i>
+                </span>
             </div>
+            @{
+                var recommendationLines = SplitRecommendation(Model.DailyRecommendation);
+            }
+            @if (recommendationLines.Length > 0)
+            {
+                <div class="insights-content text-muted">
+                    @foreach (var line in recommendationLines)
+                    {
+                        <p class="mb-2">@line</p>
+                    }
+                </div>
+            }
+            else if (!string.IsNullOrWhiteSpace(Model.DailyRecommendationError))
+            {
+                <p class="text-muted mb-0">@Model.DailyRecommendationError</p>
+            }
+            else
+            {
+                <p class="text-muted mb-0">Daily recommendations will appear once your latest data syncs.</p>
+            }
         </div>
     </div>
-}
+</section>
 
 <style>
     .dashboard-card-link {
@@ -189,7 +182,7 @@ else
         height: 1.5rem;
     }
 
-    .dashboard-card-stats li + li {
+    .dashboard-card-stats li+li {
         margin-top: 0.35rem;
     }
 
@@ -206,5 +199,20 @@ else
     .accent-activity {
         background: rgba(25, 135, 84, 0.12);
         color: #198754;
+    }
+
+    .insights-card {
+        background: linear-gradient(135deg, rgba(13, 110, 253, 0.08), rgba(111, 66, 193, 0.05));
+    }
+
+    .insights-icon {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 1.75rem;
+    }
+
+    .insights-content p:last-child {
+        margin-bottom: 0;
     }
 </style>

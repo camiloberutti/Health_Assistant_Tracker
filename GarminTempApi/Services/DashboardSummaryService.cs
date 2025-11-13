@@ -118,7 +118,7 @@ public class DashboardSummaryService
         cards.Add(new DashboardCard(
             Title: "Steps",
             PrimaryValue: string.Format(CultureInfo.InvariantCulture, "{0:N0}", latest.TotalSteps),
-            PrimaryCaption: latest.Date.ToString("ddd, dd MMM yy", CultureInfo.InvariantCulture),
+            PrimaryCaption: null,
             Subtitle: subtitle,
             DestinationUrl: "/Steps",
             IconCss: "icon-steps",
@@ -176,7 +176,7 @@ public class DashboardSummaryService
         cards.Add(new DashboardCard(
             Title: "Sleep",
             PrimaryValue: FormatDuration(totalSleep),
-            PrimaryCaption: latest.Date.ToString("dd MMM yy", CultureInfo.InvariantCulture),
+            PrimaryCaption: null,
             Subtitle: latest.BodyBatteryChange is null
                 ? "Nightly recovery overview"
                 : string.Format(CultureInfo.InvariantCulture, "Body Battery {0:+#;-#;0}", latest.BodyBatteryChange.Value),
