@@ -1,6 +1,7 @@
 @page
 @model GarminTempApi.Pages.IndexModel
 @using GarminTempApi.Services
+@using System
 @using System.Globalization
 @{
     Layout = "_Layout";
@@ -61,7 +62,18 @@
                                         }
                                     </div>
                                     <span class="dashboard-card-accent @card.AccentCss">
-                                        <i class="@card.IconCss"></i>
+                                        @if (string.Equals(card.IconCss, "icon-steps", StringComparison.OrdinalIgnoreCase))
+                                        {
+                                            <svg class="icon-steps" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                                <path d="M4.75 13.75V11.5c0-1.8 1.45-3.25 3.25-3.25h1.15c.63 0 1.22-.3 1.59-.82l1.34-1.85a2 2 0 011.63-.83h1.25c.77 0 1.49.37 1.94.99l1.12 1.57a3.5 3.5 0 001.86 1.29l2.34.64c.88.24 1.53 1.04 1.53 1.95V14a3.5 3.5 0 01-3.5 3.5H6.75a2 2 0 01-2-2Z" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                                                <path d="M5.5 16.5H17.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" />
+                                                <path d="M9.5 11.5h3" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" />
+                                            </svg>
+                                        }
+                                        else
+                                        {
+                                            <i class="@card.IconCss"></i>
+                                        }
                                     </span>
                                 </div>
                                 @if (!string.IsNullOrWhiteSpace(card.Subtitle))
@@ -170,6 +182,11 @@ else
         align-items: center;
         justify-content: center;
         font-size: 1.35rem;
+    }
+
+    .dashboard-card-accent .icon-steps {
+        width: 1.5rem;
+        height: 1.5rem;
     }
 
     .dashboard-card-stats li + li {

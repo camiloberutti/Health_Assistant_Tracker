@@ -47,7 +47,9 @@ public class GarminDataSyncService
 
         if (incrementalStart is not null)
         {
-            incrementalEnd = DateOnly.FromDateTime(DateTime.UtcNow.Date);
+            var utcToday = DateOnly.FromDateTime(DateTime.UtcNow);
+            var localToday = DateOnly.FromDateTime(DateTime.Now);
+            incrementalEnd = localToday > utcToday ? localToday : utcToday;
 
             if (incrementalStart > incrementalEnd)
             {

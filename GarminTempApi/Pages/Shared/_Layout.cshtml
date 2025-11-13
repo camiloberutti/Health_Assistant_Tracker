@@ -89,6 +89,12 @@
             font-size: 1.15rem;
         }
 
+        .sidebar-nav .nav-link .icon-steps {
+            width: 1.25rem;
+            height: 1.25rem;
+            flex-shrink: 0;
+        }
+
         .sidebar-nav .nav-link.active {
             background: rgba(88, 140, 255, 0.25);
             color: #ffffff;
@@ -161,7 +167,9 @@
         <aside class="sidebar text-white d-flex flex-column" id="sidebar">
             <div class="sidebar-header d-flex justify-content-between align-items-center">
                 <a class="text-white text-decoration-none fw-semibold d-flex align-items-center gap-2" href="/">
-                    <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-primary bg-opacity-25 text-primary" style="width: 2.25rem; height: 2.25rem;">
+                    <span
+                        class="d-inline-flex align-items-center justify-content-center rounded-circle bg-primary bg-opacity-25 text-primary"
+                        style="width: 2.25rem; height: 2.25rem;">
                         <i class="bi bi-compass"></i>
                     </span>
                     <span class="d-flex flex-column">
@@ -169,7 +177,8 @@
                         <small>Training overview</small>
                     </span>
                 </a>
-                <button class="btn btn-outline-light btn-sm d-lg-none" type="button" data-bs-toggle="sidebar" aria-label="Close menu">
+                <button class="btn btn-outline-light btn-sm d-lg-none" type="button" data-bs-toggle="sidebar"
+                    aria-label="Close menu">
                     <i class="bi bi-x-lg"></i>
                 </button>
             </div>
@@ -196,7 +205,16 @@
                     </li>
                     <li class="nav-item">
                         <a class="nav-link @(IsActive("/Steps") ? "active" : null)" href="/Steps">
-                            <i class="bi bi-shoe"></i>
+                            <svg class="icon-steps" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
+                                <path
+                                    d="M4.75 13.75V11.5c0-1.8 1.45-3.25 3.25-3.25h1.15c.63 0 1.22-.3 1.59-.82l1.34-1.85a2 2 0 011.63-.83h1.25c.77 0 1.49.37 1.94.99l1.12 1.57a3.5 3.5 0 001.86 1.29l2.34.64c.88.24 1.53 1.04 1.53 1.95V14a3.5 3.5 0 01-3.5 3.5H6.75a2 2 0 01-2-2Z"
+                                    fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+                                    stroke-linejoin="round" />
+                                <path d="M5.5 16.5H17.5" fill="none" stroke="currentColor" stroke-width="1.6"
+                                    stroke-linecap="round" stroke-linejoin="round" />
+                                <path d="M9.5 11.5h3" fill="none" stroke="currentColor" stroke-width="1.6"
+                                    stroke-linecap="round" />
+                            </svg>
                             <span>Steps</span>
                         </a>
                     </li>
@@ -214,7 +232,8 @@
                     <span class="fw-semibold">Stay synced</span>
                     <span>Latest Garmin data appears here as soon as it lands.</span>
                 </div>
-                <button class="btn btn-outline-light btn-sm w-100 mt-3 d-lg-none" type="button" data-bs-toggle="sidebar">
+                <button class="btn btn-outline-light btn-sm w-100 mt-3 d-lg-none" type="button"
+                    data-bs-toggle="sidebar">
                     Close menu
                 </button>
             </div>

@@ -121,7 +121,7 @@ public class DashboardSummaryService
             PrimaryCaption: latest.Date.ToString("ddd, dd MMM yy", CultureInfo.InvariantCulture),
             Subtitle: subtitle,
             DestinationUrl: "/Steps",
-            IconCss: "bi-shoe-prints",
+            IconCss: "icon-steps",
             AccentCss: "accent-steps",
             Stats: stats));
 
