@@ -3,9 +3,11 @@ using System.Collections.Generic;
 using System.Threading;
 using System.Threading.Tasks;
 using GarminTempApi.Controllers;
+using GarminTempApi.Data;
 using GarminTempApi.Services;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 namespace GarminTempApi.Tests;
@@ -15,7 +17,8 @@ public class InsightsControllerTests
     [Fact]
     public async Task QueryAsync_ReturnsBadRequest_WhenPromptMissing()
     {
-        var controller = new InsightsController(new StubInsightService(), NullLogger<InsightsController>.Instance);
+        await using var dbContext = CreateContext();
+        var controller = new InsightsController(new StubInsightService(), dbContext, NullLogger<InsightsController>.Instance);
 
         var result = await controller.QueryAsync(new InsightsController.QueryRequest(null, null, null), CancellationToken.None);
 
@@ -31,7 +34,8 @@ public class InsightsControllerTests
             QueryHandler = (_, _) => Task.FromResult("Here is an insight.")
         };
 
-        var controller = new InsightsController(stub, NullLogger<InsightsController>.Instance);
+        await using var dbContext = CreateContext();
+        var controller = new InsightsController(stub, dbContext, NullLogger<InsightsController>.Instance);
         var messages = new List<InsightsController.ChatMessageDto>
         {
             new("user", "How was my sleep?")
@@ -50,7 +54,8 @@ public class InsightsControllerTests
             DailyHandler = (_, _) => throw new InvalidOperationException("not configured")
         };
 
-        var controller = new InsightsController(stub, NullLogger<InsightsController>.Instance);
+        await using var dbContext = CreateContext();
+        var controller = new InsightsController(stub, dbContext, NullLogger<InsightsController>.Instance);
         var result = await controller.GetDailyRecommendation(CancellationToken.None);
 
         var serviceUnavailable = Assert.IsType<ObjectResult>(result);
@@ -65,11 +70,21 @@ public class InsightsControllerTests
             DailyHandler = (_, _) => Task.FromResult("Train easy today")
         };
 
-        var controller = new InsightsController(stub, NullLogger<InsightsController>.Instance);
+        await using var dbContext = CreateContext();
+        var controller = new InsightsController(stub, dbContext, NullLogger<InsightsController>.Instance);
         var result = await controller.GetDailyRecommendation(CancellationToken.None);
 
         var ok = Assert.IsType<OkObjectResult>(result);
         Assert.Contains("Train", ok.Value!.ToString(), StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static AppDbContext CreateContext()
+    {
+        var options = new DbContextOptionsBuilder<AppDbContext>()
+            .UseInMemoryDatabase(Guid.NewGuid().ToString())
+            .Options;
+
+        return new AppDbContext(options);
     }
 
     private sealed class StubInsightService : IOpenAiInsightService
