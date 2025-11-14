@@ -14,6 +14,7 @@ namespace GarminTempApi.Data
         public DbSet<StepSummary> StepSummaries { get; set; }
         public DbSet<ActivityDetailSnapshot> ActivityDetailSnapshots { get; set; }
         public DbSet<RecommendationFeedback> RecommendationFeedback { get; set; }
+        public DbSet<RoutineEvent> RoutineEvents { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -52,6 +53,39 @@ namespace GarminTempApi.Data
 
             modelBuilder.Entity<RecommendationFeedback>()
                 .HasIndex(f => f.SubmittedUtc);
+
+            modelBuilder.Entity<RoutineEvent>(entity =>
+            {
+                entity.Property(e => e.Title)
+                    .HasMaxLength(200)
+                    .IsRequired();
+
+                entity.Property(e => e.Classification)
+                    .HasMaxLength(100)
+                    .IsRequired();
+
+                entity.Property(e => e.RaceName)
+                    .HasMaxLength(200);
+
+                entity.Property(e => e.RaceLocation)
+                    .HasMaxLength(200);
+
+                entity.Property(e => e.RaceGoal)
+                    .HasMaxLength(400);
+
+                entity.Property(e => e.RecurrenceDays)
+                    .HasMaxLength(64);
+
+                entity.Property(e => e.CreatedUtc)
+                    .HasConversion(v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+
+                entity.Property(e => e.UpdatedUtc)
+                    .HasConversion(v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+
+                entity.HasIndex(e => e.StartLocal);
+                entity.HasIndex(e => e.EndLocal);
+                entity.HasIndex(e => e.IsRecurring);
+            });
         }
     }
 }

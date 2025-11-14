@@ -1,0 +1,742 @@
+@page
+@model GarminTempApi.Pages.MyRoutineModel
+@{
+    ViewData["Title"] = "My Routine";
+}
+
+<div class="d-flex flex-column gap-4">
+    <section class="d-flex flex-column flex-md-row align-items-md-center justify-content-between gap-3">
+        <div>
+            <h1 class="h3 mb-1">Weekly Routine</h1>
+            <p class="text-secondary mb-0">Plan workouts, races, and rest days with a drag-and-drop weekly calendar.</p>
+        </div>
+        <div class="d-flex gap-2">
+            <button class="btn btn-outline-secondary" type="button" id="previous-week">Previous</button>
+            <button class="btn btn-outline-secondary" type="button" id="next-week">Next</button>
+            <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#eventModal">Add
+                event</button>
+        </div>
+    </section>
+
+    <section class="card shadow-sm border-0">
+        <div class="card-body p-0">
+            <div
+                class="calendar-header border-bottom ps-4 pe-4 pt-3 pb-3 d-flex justify-content-between align-items-center">
+                <div class="d-flex flex-column">
+                    <span class="fw-semibold text-primary" id="week-range-label"></span>
+                    <small class="text-secondary">Drag events between days to reschedule.</small>
+                </div>
+                <button class="btn btn-light btn-sm" type="button" id="today-button">Today</button>
+            </div>
+            <div class="calendar-grid" id="calendar-grid"></div>
+        </div>
+    </section>
+</div>
+
+<div class="modal fade" id="eventModal" tabindex="-1" aria-labelledby="eventModalLabel" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-lg">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h1 class="modal-title fs-5" id="eventModalLabel">Add event</h1>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <form id="event-form">
+                <div class="modal-body">
+                    <input type="hidden" id="event-id" />
+                    <div class="row g-3">
+                        <div class="col-md-6">
+                            <label class="form-label" for="event-title">Title</label>
+                            <input class="form-control" id="event-title" maxlength="200" required />
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="event-classification">Classification</label>
+                            <select class="form-select" id="event-classification" required>
+                                <option value="Training">Training</option>
+                                <option value="Workout">Workout</option>
+                                <option value="Recovery">Recovery</option>
+                                <option value="Rest">Rest</option>
+                                <option value="Race">Race</option>
+                            </select>
+                        </div>
+                        <div class="col-md-6">
+                            <label class="form-label" for="event-date">Date</label>
+                            <input class="form-control" type="date" id="event-date" required />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="event-start">Start time</label>
+                            <input class="form-control" type="time" id="event-start" required />
+                        </div>
+                        <div class="col-md-3">
+                            <label class="form-label" for="event-end">End time</label>
+                            <input class="form-control" type="time" id="event-end" required />
+                        </div>
+                        <div class="col-12" id="race-details" style="display: none;">
+                            <div class="border rounded p-3 bg-light">
+                                <h2 class="h6">Race details</h2>
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="race-name">Race name</label>
+                                        <input class="form-control" id="race-name" maxlength="200" />
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="race-location">Location</label>
+                                        <input class="form-control" id="race-location" maxlength="200" />
+                                    </div>
+                                    <div class="col-md-4">
+                                        <label class="form-label" for="race-goal">Goal</label>
+                                        <input class="form-control" id="race-goal" maxlength="400" />
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                                <div class="col-12">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" id="event-repeat">
+                                        <label class="form-check-label" for="event-repeat">Repeat weekly</label>
+                                    </div>
+                                </div>
+                                <div class="col-12" id="recurrence-options" style="display: none;">
+                                    <div class="border rounded p-3 bg-light-subtle">
+                                        <span class="d-block text-uppercase text-secondary-emphasis fw-semibold small mb-2">Repeat on</span>
+                                        <div class="d-flex flex-wrap gap-2 mb-3 repeat-day-group">
+                                            <div>
+                                                <input class="btn-check" type="checkbox" id="recurrence-day-1" name="recurrence-day" value="1" autocomplete="off">
+                                                <label class="btn btn-outline-primary btn-sm" for="recurrence-day-1">Mon</label>
+                                            </div>
+                                            <div>
+                                                <input class="btn-check" type="checkbox" id="recurrence-day-2" name="recurrence-day" value="2" autocomplete="off">
+                                                <label class="btn btn-outline-primary btn-sm" for="recurrence-day-2">Tue</label>
+                                            </div>
+                                            <div>
+                                                <input class="btn-check" type="checkbox" id="recurrence-day-3" name="recurrence-day" value="3" autocomplete="off">
+                                                <label class="btn btn-outline-primary btn-sm" for="recurrence-day-3">Wed</label>
+                                            </div>
+                                            <div>
+                                                <input class="btn-check" type="checkbox" id="recurrence-day-4" name="recurrence-day" value="4" autocomplete="off">
+                                                <label class="btn btn-outline-primary btn-sm" for="recurrence-day-4">Thu</label>
+                                            </div>
+                                            <div>
+                                                <input class="btn-check" type="checkbox" id="recurrence-day-5" name="recurrence-day" value="5" autocomplete="off">
+                                                <label class="btn btn-outline-primary btn-sm" for="recurrence-day-5">Fri</label>
+                                            </div>
+                                            <div>
+                                                <input class="btn-check" type="checkbox" id="recurrence-day-6" name="recurrence-day" value="6" autocomplete="off">
+                                                <label class="btn btn-outline-primary btn-sm" for="recurrence-day-6">Sat</label>
+                                            </div>
+                                            <div>
+                                                <input class="btn-check" type="checkbox" id="recurrence-day-0" name="recurrence-day" value="0" autocomplete="off">
+                                                <label class="btn btn-outline-primary btn-sm" for="recurrence-day-0">Sun</label>
+                                            </div>
+                                        </div>
+                                        <div class="row g-3">
+                                            <div class="col-md-6">
+                                                <label class="form-label" for="recurrence-start">Recurrence start</label>
+                                                <input class="form-control" type="date" id="recurrence-start" />
+                                            </div>
+                                            <div class="col-md-6">
+                                                <label class="form-label" for="recurrence-end">Recurrence end</label>
+                                                <input class="form-control" type="date" id="recurrence-end" />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                        <div class="col-12">
+                            <label class="form-label" for="event-notes">Notes</label>
+                            <textarea class="form-control" id="event-notes" rows="3" maxlength="1000"></textarea>
+                        </div>
+                    </div>
+                </div>
+                <div class="modal-footer justify-content-between">
+                    <button class="btn btn-outline-danger" type="button" id="delete-event"
+                        style="display: none;">Delete</button>
+                    <div class="d-flex gap-2 ms-auto">
+                        <button class="btn btn-outline-secondary" type="button" data-bs-dismiss="modal">Cancel</button>
+                        <button class="btn btn-primary" type="submit">Save</button>
+                    </div>
+                </div>
+            </form>
+        </div>
+    </div>
+</div>
+
+@section Scripts {
+    <script>
+        (() => {
+            const grid = document.getElementById('calendar-grid');
+            const weekLabel = document.getElementById('week-range-label');
+            const previousWeek = document.getElementById('previous-week');
+            const nextWeek = document.getElementById('next-week');
+            const todayButton = document.getElementById('today-button');
+            const form = document.getElementById('event-form');
+            const modalElement = document.getElementById('eventModal');
+            const modal = new bootstrap.Modal(modalElement);
+            const deleteButton = document.getElementById('delete-event');
+            const classificationSelect = document.getElementById('event-classification');
+            const raceDetails = document.getElementById('race-details');
+            const repeatToggle = document.getElementById('event-repeat');
+            const recurrenceSection = document.getElementById('recurrence-options');
+            const recurrenceStartInput = document.getElementById('recurrence-start');
+            const recurrenceEndInput = document.getElementById('recurrence-end');
+            const recurrenceDayInputs = Array.from(document.querySelectorAll('input[name="recurrence-day"]'));
+            const eventDateInput = document.getElementById('event-date');
+            const eventStartInput = document.getElementById('event-start');
+            const eventEndInput = document.getElementById('event-end');
+
+            const state = {
+                startOfWeek: startOfWeek(new Date()),
+                events: []
+            };
+
+            classificationSelect.addEventListener('change', () => {
+                const isRace = classificationSelect.value === 'Race';
+                raceDetails.style.display = isRace ? 'block' : 'none';
+                document.getElementById('race-name').required = isRace;
+                document.getElementById('race-location').required = isRace;
+                document.getElementById('race-goal').required = isRace;
+            });
+
+            repeatToggle.addEventListener('change', () => {
+                const show = repeatToggle.checked;
+                recurrenceSection.style.display = show ? 'block' : 'none';
+
+                if (show) {
+                    if (!recurrenceStartInput.value && eventDateInput.value) {
+                        recurrenceStartInput.value = eventDateInput.value;
+                    }
+
+                    if (!recurrenceEndInput.value && recurrenceStartInput.value) {
+                        recurrenceEndInput.value = recurrenceStartInput.value;
+                    }
+
+                    if (!recurrenceDayInputs.some(input => input.checked) && eventDateInput.value) {
+                        const currentDay = new Date(`${eventDateInput.value}T00:00:00`);
+                        const targetDay = currentDay.getDay();
+                        const match = recurrenceDayInputs.find(input => Number(input.value) === targetDay);
+                        if (match) {
+                            match.checked = true;
+                        }
+                    }
+                }
+            });
+
+            function startOfWeek(date) {
+                const result = new Date(date);
+                const day = result.getDay();
+                const diff = (day === 0 ? -6 : 1) - day;
+                result.setDate(result.getDate() + diff);
+                result.setHours(0, 0, 0, 0);
+                return result;
+            }
+
+            function formatRangeLabel(start) {
+                const end = new Date(start);
+                end.setDate(end.getDate() + 6);
+                const formatter = new Intl.DateTimeFormat(undefined, { month: 'short', day: 'numeric' });
+                return `${formatter.format(start)} – ${formatter.format(end)}`;
+            }
+
+            function formatIsoDate(date) {
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                return `${year}-${month}-${day}`;
+            }
+
+            function formatTimeForInput(date) {
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                return `${hours}:${minutes}`;
+            }
+
+            function buildDayColumn(date) {
+                const column = document.createElement('div');
+                column.className = 'calendar-column';
+                column.dataset.date = formatIsoDate(date);
+                column.innerHTML = `
+                        <header class="calendar-column-header">
+                            <div class="d-flex flex-column">
+                                <span class="day-name">${date.toLocaleDateString(undefined, { weekday: 'short' })}</span>
+                                <span class="day-number">${date.getDate()}</span>
+                            </div>
+                        </header>
+                        <div class="calendar-column-body" data-dropzone></div>
+                    `;
+
+                const body = column.querySelector('[data-dropzone]');
+
+                body.addEventListener('dragover', evt => {
+                    evt.preventDefault();
+                    body.classList.add('drag-over');
+                });
+
+                body.addEventListener('dragleave', () => body.classList.remove('drag-over'));
+
+                body.addEventListener('drop', async evt => {
+                    evt.preventDefault();
+                    body.classList.remove('drag-over');
+                    const key = evt.dataTransfer.getData('text/plain');
+                    if (!key) return;
+                    const event = state.events.find(e => e.key === key);
+                    if (!event || event.isRecurring) return;
+                    const newDate = column.dataset.date;
+                    const start = new Date(event.startLocal);
+                    const end = new Date(event.endLocal);
+                    const [year, month, day] = newDate.split('-').map(Number);
+                    const hours = start.getHours();
+                    const minutes = start.getMinutes();
+                    const duration = end.getTime() - start.getTime();
+                    const updatedStart = new Date(year, month - 1, day, hours, minutes);
+                    const updatedEnd = new Date(updatedStart.getTime() + duration);
+                    await saveEvent({ ...event, startLocal: updatedStart, endLocal: updatedEnd });
+                    await loadEvents();
+                });
+
+                return column;
+            }
+
+            function renderGrid() {
+                grid.innerHTML = '';
+                const date = new Date(state.startOfWeek);
+                weekLabel.textContent = formatRangeLabel(date);
+
+                for (let i = 0; i < 7; i++) {
+                    const column = buildDayColumn(date);
+                    grid.appendChild(column);
+                    date.setDate(date.getDate() + 1);
+                }
+
+                renderEvents();
+            }
+
+            function renderEvents() {
+                document.querySelectorAll('[data-dropzone]').forEach(zone => zone.innerHTML = '');
+
+                state.events.forEach(event => {
+                    const start = new Date(event.startLocal);
+                    const end = new Date(event.endLocal);
+                    const dateKey = formatIsoDate(start);
+                    const zone = document.querySelector(`[data-dropzone][data-date="${dateKey}"]`) || document.querySelector(`[data-date="${dateKey}"] [data-dropzone]`);
+                    if (!zone) return;
+
+                    const item = document.createElement('div');
+                    item.className = `calendar-event calendar-event-${event.classification.toLowerCase()}`;
+                    item.dataset.id = String(event.id);
+                    item.dataset.key = event.key;
+                    item.draggable = !event.isRecurring;
+                    item.classList.toggle('calendar-event-recurring', Boolean(event.isRecurring));
+
+                    const badge = event.isRecurring ? '<span class="event-badge" title="Repeats weekly">↻</span>' : '';
+                    item.innerHTML = `
+                        <div class="d-flex justify-content-between align-items-start gap-2">
+                            <div>
+                                <div class="event-title">${event.title}</div>
+                                <div class="event-time text-secondary">${start.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })} – ${end.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</div>
+                            </div>
+                            ${badge}
+                        </div>
+                    `;
+
+                    if (!event.isRecurring) {
+                        item.addEventListener('dragstart', evt => {
+                            evt.dataTransfer.setData('text/plain', event.key);
+                            evt.dataTransfer.effectAllowed = 'move';
+                        });
+                    }
+
+                    item.addEventListener('click', () => openModal(event));
+
+                    zone.appendChild(item);
+                });
+            }
+
+            async function loadEvents() {
+                const start = state.startOfWeek;
+                const end = new Date(start);
+                end.setDate(end.getDate() + 7);
+
+                const params = new URLSearchParams({
+                    startDate: formatIsoDate(start),
+                    endDate: formatIsoDate(end)
+                });
+
+                const response = await fetch(`/api/routine-events?${params}`);
+                if (!response.ok) {
+                    console.error('Failed to load routine events');
+                    return;
+                }
+
+                const data = await response.json();
+                state.events = data.map(evt => {
+                    const recurrenceDays = Array.isArray(evt.recurrenceDays) ? evt.recurrenceDays : [];
+                    return {
+                        ...evt,
+                        startLocal: evt.startLocal,
+                        endLocal: evt.endLocal,
+                        recurrenceDays,
+                        repeatWeekly: Boolean(evt.isRecurring && recurrenceDays.length > 0),
+                        key: `${evt.id}:${evt.startLocal}`
+                    };
+                });
+                renderEvents();
+            }
+
+            async function saveEvent(event) {
+                const repeatWeekly = Boolean(event.repeatWeekly);
+                const recurrenceDays = repeatWeekly && Array.isArray(event.recurrenceDays) ? event.recurrenceDays : [];
+                const recurrenceStartDate = repeatWeekly && event.recurrenceStartDate ? event.recurrenceStartDate : null;
+                const recurrenceEndDate = repeatWeekly && event.recurrenceEndDate ? event.recurrenceEndDate : null;
+
+                const isRace = 'isRace' in event ? Boolean(event.isRace) : event.classification === 'Race';
+
+                const payload = {
+                    title: event.title,
+                    classification: event.classification,
+                    startLocal: event.startLocal,
+                    endLocal: event.endLocal,
+                    isRace,
+                    repeatWeekly,
+                    recurrenceDays,
+                    recurrenceStartDate,
+                    recurrenceEndDate,
+                    raceName: event.raceName ?? null,
+                    raceLocation: event.raceLocation ?? null,
+                    raceGoal: event.raceGoal ?? null,
+                    notes: event.notes ?? null
+                };
+
+                const body = JSON.stringify(payload, (key, value) => {
+                    if (value instanceof Date) {
+                        return value.toISOString();
+                    }
+                    return value;
+                });
+
+                const opts = {
+                    method: event.id ? 'PUT' : 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body
+                };
+
+                const url = event.id ? `/api/routine-events/${event.id}` : '/api/routine-events';
+                const response = await fetch(url, opts);
+                if (!response.ok) {
+                    const message = await response.text();
+                    throw new Error(message || 'Failed to save event');
+                }
+
+                return response.json();
+            }
+
+            async function deleteEvent(id) {
+                const response = await fetch(`/api/routine-events/${id}`, { method: 'DELETE' });
+                if (!response.ok) {
+                    throw new Error('Failed to delete event');
+                }
+            }
+
+            function openModal(event) {
+                const editing = Boolean(event);
+                document.getElementById('eventModalLabel').textContent = editing ? 'Edit event' : 'Add event';
+                deleteButton.style.display = editing ? 'inline-flex' : 'none';
+                deleteButton.dataset.id = editing ? event.id : '';
+                form.reset();
+
+                const now = new Date();
+                const defaultDate = editing ? new Date(event.startLocal) : now;
+                const defaultStart = editing ? new Date(event.startLocal) : now;
+                const defaultEnd = editing ? new Date(event.endLocal) : new Date(now.getTime() + 60 * 60 * 1000);
+
+                document.getElementById('event-id').value = editing ? event.id : '';
+                document.getElementById('event-title').value = editing ? event.title : '';
+                classificationSelect.value = editing ? event.classification : 'Training';
+                classificationSelect.dispatchEvent(new Event('change'));
+                eventDateInput.value = formatIsoDate(defaultDate);
+                eventStartInput.value = editing ? formatTimeForInput(defaultStart) : '08:00';
+                eventEndInput.value = editing ? formatTimeForInput(defaultEnd) : '09:00';
+                document.getElementById('race-name').value = editing && event.raceName ? event.raceName : '';
+                document.getElementById('race-location').value = editing && event.raceLocation ? event.raceLocation : '';
+                document.getElementById('race-goal').value = editing && event.raceGoal ? event.raceGoal : '';
+                document.getElementById('event-notes').value = editing && event.notes ? event.notes : '';
+
+                repeatToggle.checked = editing ? Boolean(event.isRecurring) : false;
+                repeatToggle.dispatchEvent(new Event('change'));
+                recurrenceDayInputs.forEach(input => { input.checked = false; });
+
+                if (repeatToggle.checked) {
+                    const recurringDays = Array.isArray(event.recurrenceDays) ? event.recurrenceDays : [];
+                    recurringDays.forEach(day => {
+                        const checkbox = recurrenceDayInputs.find(input => Number(input.value) === day);
+                        if (checkbox) {
+                            checkbox.checked = true;
+                        }
+                    });
+
+                    recurrenceStartInput.value = event.recurrenceStartDate ?? formatIsoDate(defaultDate);
+                    recurrenceEndInput.value = event.recurrenceEndDate ?? recurrenceStartInput.value;
+                } else {
+                    recurrenceStartInput.value = '';
+                    recurrenceEndInput.value = '';
+                }
+
+                modal.show();
+            }
+
+            form.addEventListener('submit', async evt => {
+                evt.preventDefault();
+
+                const id = document.getElementById('event-id').value;
+                const title = document.getElementById('event-title').value.trim();
+                const classification = classificationSelect.value;
+                const date = eventDateInput.value;
+                const start = eventStartInput.value;
+                const end = eventEndInput.value;
+
+                if (!title || !date || !start || !end) {
+                    return;
+                }
+
+                const startDate = new Date(`${date}T${start}`);
+                const endDate = new Date(`${date}T${end}`);
+
+                if (endDate <= startDate) {
+                    alert('End time must be after start time.');
+                    return;
+                }
+
+                const repeatWeekly = repeatToggle.checked;
+                const selectedDays = recurrenceDayInputs.filter(input => input.checked).map(input => Number(input.value));
+                const recurrenceStartDate = recurrenceStartInput.value;
+                const recurrenceEndDate = recurrenceEndInput.value;
+
+                if (repeatWeekly) {
+                    if (selectedDays.length === 0) {
+                        alert('Select at least one weekday for the recurrence.');
+                        return;
+                    }
+
+                    if (!recurrenceStartDate || !recurrenceEndDate) {
+                        alert('Provide both a start and end date for the recurrence.');
+                        return;
+                    }
+
+                    if (recurrenceEndDate < recurrenceStartDate) {
+                        alert('Recurrence end date must be on or after the start date.');
+                        return;
+                    }
+                }
+
+                const event = {
+                    id: id ? Number(id) : undefined,
+                    title,
+                    classification,
+                    startLocal: startDate,
+                    endLocal: endDate,
+                    raceName: document.getElementById('race-name').value.trim() || null,
+                    raceLocation: document.getElementById('race-location').value.trim() || null,
+                    raceGoal: document.getElementById('race-goal').value.trim() || null,
+                    notes: document.getElementById('event-notes').value.trim() || null,
+                    repeatWeekly,
+                    recurrenceDays: repeatWeekly ? selectedDays : [],
+                    recurrenceStartDate: repeatWeekly ? recurrenceStartDate : null,
+                    recurrenceEndDate: repeatWeekly ? recurrenceEndDate : null,
+                    isRace: classification === 'Race',
+                    isRecurring: repeatWeekly
+                };
+
+                if (event.isRace && (!event.raceName || !event.raceLocation || !event.raceGoal)) {
+                    alert('Race events require name, location, and goal.');
+                    return;
+                }
+
+                try {
+                    await saveEvent(event);
+                    await loadEvents();
+                    modal.hide();
+                } catch (error) {
+                    console.error(error);
+                    alert('Unable to save event. Please try again.');
+                }
+            });
+
+            deleteButton.addEventListener('click', async () => {
+                const id = deleteButton.dataset.id;
+                if (!id) {
+                    return;
+                }
+
+                if (!confirm('Delete this event?')) {
+                    return;
+                }
+
+                try {
+                    await deleteEvent(id);
+                    await loadEvents();
+                    modal.hide();
+                } catch (error) {
+                    console.error(error);
+                    alert('Unable to delete event.');
+                }
+            });
+
+            previousWeek.addEventListener('click', async () => {
+                state.startOfWeek.setDate(state.startOfWeek.getDate() - 7);
+                renderGrid();
+                await loadEvents();
+            });
+
+            nextWeek.addEventListener('click', async () => {
+                state.startOfWeek.setDate(state.startOfWeek.getDate() + 7);
+                renderGrid();
+                await loadEvents();
+            });
+
+            todayButton.addEventListener('click', async () => {
+                state.startOfWeek = startOfWeek(new Date());
+                renderGrid();
+                await loadEvents();
+            });
+
+            document.addEventListener('click', evt => {
+                if (evt.target.matches('[data-action="add-event"]')) {
+                    openModal();
+                }
+            });
+
+            modalElement.addEventListener('hidden.bs.modal', () => {
+                form.reset();
+                classificationSelect.dispatchEvent(new Event('change'));
+                repeatToggle.checked = false;
+                recurrenceSection.style.display = 'none';
+                recurrenceDayInputs.forEach(input => { input.checked = false; });
+            });
+
+            renderGrid();
+            loadEvents();
+        })();
+    </script>
+    <style>
+        .calendar-grid {
+            display: grid;
+            grid-template-columns: repeat(7, minmax(0, 1fr));
+            border-top: 1px solid rgba(15, 23, 42, 0.08);
+        }
+
+        .calendar-column {
+            display: flex;
+            flex-direction: column;
+            min-height: 420px;
+            border-left: 1px solid rgba(15, 23, 42, 0.08);
+        }
+
+        .calendar-column:first-child {
+            border-left: none;
+        }
+
+        .calendar-column-header {
+            padding: 1rem 1.1rem;
+            border-bottom: 1px solid rgba(15, 23, 42, 0.08);
+        }
+
+        .day-name {
+            font-size: 0.85rem;
+            text-transform: uppercase;
+            letter-spacing: 0.04em;
+            color: var(--bs-secondary-color);
+        }
+
+        .day-number {
+            font-weight: 600;
+            font-size: 1.4rem;
+        }
+
+        .calendar-column-body {
+            flex: 1;
+            padding: 1rem;
+            display: flex;
+            flex-direction: column;
+            gap: 0.75rem;
+        }
+
+        .calendar-column-body.drag-over {
+            background: rgba(88, 140, 255, 0.08);
+        }
+
+        .calendar-event {
+            border-radius: 0.75rem;
+            padding: 0.75rem 0.85rem;
+            box-shadow: 0 6px 16px rgba(15, 23, 42, 0.12);
+            color: #0f172a;
+            cursor: grab;
+            background: white;
+        }
+
+        .calendar-event:hover {
+            transform: translateY(-1px);
+            box-shadow: 0 10px 24px rgba(15, 23, 42, 0.18);
+        }
+
+        .calendar-event-recurring {
+            border-left-style: double;
+            cursor: default;
+        }
+
+        .event-badge {
+            font-weight: 600;
+            font-size: 0.7rem;
+        }
+
+        .calendar-event-recurring .event-badge {
+            background: rgba(37, 99, 235, 0.16);
+            color: #1d4ed8;
+            border-radius: 0.5rem;
+            padding: 0.1rem 0.45rem;
+            line-height: 1.1;
+        }
+
+        .repeat-day-group .btn {
+            min-width: 3.1rem;
+        }
+
+        .calendar-event-training {
+            border-left: 4px solid var(--bs-primary);
+        }
+
+        .calendar-event-workout {
+            border-left: 4px solid #f97316;
+        }
+
+        .calendar-event-recovery {
+            border-left: 4px solid #0ea5e9;
+        }
+
+        .calendar-event-rest {
+            border-left: 4px solid #94a3b8;
+        }
+
+        .calendar-event-race {
+            border-left: 4px solid #22c55e;
+        }
+
+        .event-title {
+            font-weight: 600;
+            margin-bottom: 0.25rem;
+        }
+
+        @@media (max-width: 992px) {
+            .calendar-grid {
+                display: flex;
+                overflow-x: auto;
+            }
+
+            .calendar-column {
+                min-width: 260px;
+                border-left: none;
+                border-right: 1px solid rgba(15, 23, 42, 0.08);
+            }
+
+            .calendar-column:last-child {
+                border-right: none;
+            }
+        }
+    </style>
+}

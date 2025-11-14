@@ -124,7 +124,27 @@ using (var scope = app.Services.CreateScope())
             FocusArea TEXT NULL,
             Notes TEXT NULL
         );");
-    EnsureSleepSummaryColumns(db.Database.GetDbConnection());
+    db.Database.ExecuteSqlRaw(@"CREATE TABLE IF NOT EXISTS RoutineEvents (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            Title TEXT NOT NULL,
+            Classification TEXT NOT NULL,
+            StartLocal TEXT NOT NULL,
+            EndLocal TEXT NOT NULL,
+            IsRace INTEGER NOT NULL,
+            IsRecurring INTEGER NOT NULL DEFAULT 0,
+            RaceName TEXT NULL,
+            RaceLocation TEXT NULL,
+            RaceGoal TEXT NULL,
+            Notes TEXT NULL,
+            RecurrenceDays TEXT NULL,
+            RecurrenceStartLocal TEXT NULL,
+            RecurrenceEndLocal TEXT NULL,
+            CreatedUtc TEXT NOT NULL,
+            UpdatedUtc TEXT NOT NULL
+        );");
+    var connection = db.Database.GetDbConnection();
+    EnsureSleepSummaryColumns(connection);
+    EnsureRoutineEventColumns(connection);
 
     var loggerFactory = scope.ServiceProvider.GetRequiredService<ILoggerFactory>();
     var logger = loggerFactory.CreateLogger("SampleDataSeeder");
@@ -249,6 +269,52 @@ static void EnsureSleepSummaryColumns(DbConnection connection)
 
             using var alter = connection.CreateCommand();
             alter.CommandText = $"ALTER TABLE SleepSummaries ADD COLUMN {column} {type};";
+            alter.ExecuteNonQuery();
+        }
+    }
+    finally
+    {
+        connection.Close();
+    }
+}
+
+static void EnsureRoutineEventColumns(DbConnection connection)
+{
+    var requiredColumns = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+    {
+        { "IsRecurring", "INTEGER NOT NULL DEFAULT 0" },
+        { "RecurrenceDays", "TEXT" },
+        { "RecurrenceStartLocal", "TEXT" },
+        { "RecurrenceEndLocal", "TEXT" }
+    };
+
+    if (connection.State != System.Data.ConnectionState.Open)
+    {
+        connection.Open();
+    }
+
+    try
+    {
+        var existingColumns = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        using (var command = connection.CreateCommand())
+        {
+            command.CommandText = "PRAGMA table_info(RoutineEvents);";
+            using var reader = command.ExecuteReader();
+            while (reader.Read())
+            {
+                existingColumns.Add(reader.GetString(1));
+            }
+        }
+
+        foreach (var (column, definition) in requiredColumns)
+        {
+            if (existingColumns.Contains(column))
+            {
+                continue;
+            }
+
+            using var alter = connection.CreateCommand();
+            alter.CommandText = $"ALTER TABLE RoutineEvents ADD COLUMN {column} {definition};";
             alter.ExecuteNonQuery();
         }
     }
