@@ -263,6 +263,7 @@
                     `;
 
                 const body = column.querySelector('[data-dropzone]');
+                body.dataset.date = column.dataset.date;
 
                 body.addEventListener('dragover', evt => {
                     evt.preventDefault();
@@ -308,25 +309,18 @@
                 renderEvents();
             }
 
-            function renderEvents() {
-                document.querySelectorAll('[data-dropzone]').forEach(zone => zone.innerHTML = '');
+            function createEventElement(entry) {
+                const { raw: event, start, end } = entry;
+                const item = document.createElement('div');
+                const classification = (event.classification || 'Training').toLowerCase();
+                item.className = `calendar-event calendar-event-${classification}`;
+                item.dataset.id = String(event.id);
+                item.dataset.key = event.key;
+                item.draggable = !event.isRecurring;
+                item.classList.toggle('calendar-event-recurring', Boolean(event.isRecurring));
 
-                state.events.forEach(event => {
-                    const start = new Date(event.startLocal);
-                    const end = new Date(event.endLocal);
-                    const dateKey = formatIsoDate(start);
-                    const zone = document.querySelector(`[data-dropzone][data-date="${dateKey}"]`) || document.querySelector(`[data-date="${dateKey}"] [data-dropzone]`);
-                    if (!zone) return;
-
-                    const item = document.createElement('div');
-                    item.className = `calendar-event calendar-event-${event.classification.toLowerCase()}`;
-                    item.dataset.id = String(event.id);
-                    item.dataset.key = event.key;
-                    item.draggable = !event.isRecurring;
-                    item.classList.toggle('calendar-event-recurring', Boolean(event.isRecurring));
-
-                    const badge = event.isRecurring ? '<span class="event-badge" title="Repeats weekly">↻</span>' : '';
-                    item.innerHTML = `
+                const badge = event.isRecurring ? '<span class="event-badge" title="Repeats weekly">↻</span>' : '';
+                item.innerHTML = `
                         <div class="d-flex justify-content-between align-items-start gap-2">
                             <div>
                                 <div class="event-title">${event.title}</div>
@@ -336,16 +330,140 @@
                         </div>
                     `;
 
-                    if (!event.isRecurring) {
-                        item.addEventListener('dragstart', evt => {
-                            evt.dataTransfer.setData('text/plain', event.key);
-                            evt.dataTransfer.effectAllowed = 'move';
-                        });
+                if (!event.isRecurring) {
+                    item.addEventListener('dragstart', evt => {
+                        evt.dataTransfer.setData('text/plain', event.key);
+                        evt.dataTransfer.effectAllowed = 'move';
+                    });
+                }
+
+                item.addEventListener('click', () => openModal(event));
+                return item;
+            }
+
+            function assignColumns(cluster) {
+                const sorted = cluster.slice().sort((a, b) => {
+                    if (a.startMs !== b.startMs) {
+                        return a.startMs - b.startMs;
+                    }
+                    return a.endMs - b.endMs;
+                });
+
+                const columns = [];
+
+                sorted.forEach(entry => {
+                    let assignedColumn = -1;
+                    for (let i = 0; i < columns.length; i++) {
+                        const column = columns[i];
+                        const last = column[column.length - 1];
+                        if (entry.startMs >= last.endMs) {
+                            column.push(entry);
+                            assignedColumn = i;
+                            break;
+                        }
                     }
 
-                    item.addEventListener('click', () => openModal(event));
+                    if (assignedColumn === -1) {
+                        columns.push([entry]);
+                        assignedColumn = columns.length - 1;
+                    }
 
-                    zone.appendChild(item);
+                    entry.columnIndex = assignedColumn;
+                });
+
+                const totalColumns = columns.length;
+                cluster.forEach(entry => {
+                    entry.columnCount = totalColumns;
+                });
+            }
+
+            function renderEvents() {
+                document.querySelectorAll('[data-dropzone]').forEach(zone => zone.innerHTML = '');
+
+                const eventsByDate = new Map();
+
+                state.events.forEach(event => {
+                    const start = new Date(event.startLocal);
+                    const end = new Date(event.endLocal);
+                    const dateKey = formatIsoDate(start);
+                    if (!eventsByDate.has(dateKey)) {
+                        eventsByDate.set(dateKey, []);
+                    }
+
+                    eventsByDate.get(dateKey).push({
+                        raw: event,
+                        start,
+                        end,
+                        startMs: start.getTime(),
+                        endMs: end.getTime(),
+                        columnIndex: 0,
+                        columnCount: 1
+                    });
+                });
+
+                eventsByDate.forEach((dayEvents, dateKey) => {
+                    const zone = document.querySelector(`[data-dropzone][data-date="${dateKey}"]`) ?? document.querySelector(`[data-date="${dateKey}"] [data-dropzone]`);
+                    if (!zone || dayEvents.length === 0) {
+                        return;
+                    }
+
+                    dayEvents.sort((a, b) => {
+                        if (a.startMs !== b.startMs) {
+                            return a.startMs - b.startMs;
+                        }
+                        return a.endMs - b.endMs;
+                    });
+
+                    const clusters = [];
+                    let currentCluster = [];
+                    let clusterEnd = 0;
+
+                    dayEvents.forEach(entry => {
+                        if (currentCluster.length === 0) {
+                            currentCluster.push(entry);
+                            clusterEnd = entry.endMs;
+                            return;
+                        }
+
+                        if (entry.startMs < clusterEnd) {
+                            currentCluster.push(entry);
+                            clusterEnd = Math.max(clusterEnd, entry.endMs);
+                        } else {
+                            clusters.push(currentCluster);
+                            currentCluster = [entry];
+                            clusterEnd = entry.endMs;
+                        }
+                    });
+
+                    if (currentCluster.length > 0) {
+                        clusters.push(currentCluster);
+                    }
+
+                    clusters.forEach(cluster => {
+                        if (cluster.length === 1) {
+                            const [entry] = cluster;
+                            const element = createEventElement(entry);
+                            zone.appendChild(element);
+                            return;
+                        }
+
+                        assignColumns(cluster);
+
+                        const wrapper = document.createElement('div');
+                        wrapper.className = 'calendar-event-group';
+                        const columns = cluster[0].columnCount ?? cluster.length;
+                        wrapper.style.setProperty('--columns', String(columns));
+
+                        cluster
+                            .slice()
+                            .sort((a, b) => (a.columnIndex ?? 0) - (b.columnIndex ?? 0))
+                            .forEach(entry => {
+                                const element = createEventElement(entry);
+                                wrapper.appendChild(element);
+                            });
+
+                        zone.appendChild(wrapper);
+                    });
                 });
             }
 
@@ -554,7 +672,8 @@
                     modal.hide();
                 } catch (error) {
                     console.error(error);
-                    alert('Unable to save event. Please try again.');
+                    const message = error instanceof Error && error.message ? error.message : 'Unable to save event. Please try again.';
+                    alert(message);
                 }
             });
 
@@ -668,6 +787,7 @@
             color: #0f172a;
             cursor: grab;
             background: white;
+            width: 100%;
         }
 
         .calendar-event:hover {
@@ -678,6 +798,13 @@
         .calendar-event-recurring {
             border-left-style: double;
             cursor: default;
+        }
+
+        .calendar-event-group {
+            display: grid;
+            gap: 0.75rem;
+            grid-template-columns: repeat(var(--columns, 1), minmax(0, 1fr));
+            width: 100%;
         }
 
         .event-badge {
