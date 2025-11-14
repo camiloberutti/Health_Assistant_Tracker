@@ -88,6 +88,10 @@ builder.Services.AddOptions<OpenAiOptions>()
         }
     });
 
+builder.Services.AddOptions<CalendarRecommendationOptions>()
+    .Bind(builder.Configuration.GetSection("CalendarRecommendations"))
+    .ValidateDataAnnotations();
+
 builder.Services.AddHttpClient<IOpenAiInsightService, OpenAiInsightService>(client =>
 {
     client.Timeout = TimeSpan.FromSeconds(45);

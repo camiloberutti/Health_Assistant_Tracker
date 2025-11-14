@@ -77,3 +77,51 @@ public record WeeklyActivitySummary(
     double? DurationMinutes,
     string Intensity
 );
+
+public record RoutineEventSnapshot(
+    int Id,
+    string Title,
+    string Classification,
+    DateTime StartLocal,
+    DateTime EndLocal,
+    bool IsRace,
+    bool IsRecurring,
+    IReadOnlyList<int> RecurrenceDays,
+    string? RecurrenceStartDate,
+    string? RecurrenceEndDate,
+    string? RaceName,
+    string? RaceLocation,
+    string? RaceGoal,
+    string? Notes
+);
+
+public record RaceEventInsight(
+    int Id,
+    string Title,
+    string? RaceName,
+    DateTime StartLocal,
+    DateTime EndLocal,
+    string Classification,
+    string Phase,
+    int DaysOffset,
+    string? RaceLocation,
+    string? RaceGoal,
+    string? Notes
+);
+
+public record CalendarInsightPayload(
+    DateTime Today,
+    IReadOnlyList<RoutineEventSnapshot> PastThreeDays,
+    IReadOnlyList<RoutineEventSnapshot> TodayEvents,
+    IReadOnlyList<RoutineEventSnapshot> TomorrowEvents,
+    IReadOnlyList<RoutineEventSnapshot> NextThreeDays,
+    IReadOnlyList<RaceEventInsight> RaceFocus,
+    CalendarRaceConfiguration RaceConfiguration
+);
+
+public record CalendarRaceConfiguration(
+    int PreparationWindowDays,
+    int TaperWindowDays,
+    int RecoveryWindowDays,
+    int LookaheadDays
+);

@@ -13,6 +13,7 @@ using GarminTempApi.Tests.TestUtilities;
 using Microsoft.Extensions.Configuration;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Xunit;
 
 namespace GarminTempApi.Tests;
@@ -45,6 +46,7 @@ public class OpenAiInsightServiceTests
         var service = new OpenAiInsightService(
             new InsightDataBuilder(context, NullLogger<InsightDataBuilder>.Instance),
             new StaticOptionsMonitor<OpenAiOptions>(options),
+            Options.Create(new CalendarRecommendationOptions()),
             httpClient,
             configuration,
             NullLogger<OpenAiInsightService>.Instance);
@@ -65,6 +67,7 @@ public class OpenAiInsightServiceTests
             var userContent = document.RootElement.GetProperty("messages")[1].GetProperty("content").GetString();
             Assert.NotNull(userContent);
             Assert.Contains("\"type\":\"daily-recommendation\"", userContent!);
+            Assert.Contains("\"calendar\"", userContent!);
         }
     }
 
@@ -91,6 +94,7 @@ public class OpenAiInsightServiceTests
         var service = new OpenAiInsightService(
             new InsightDataBuilder(context, NullLogger<InsightDataBuilder>.Instance),
             new StaticOptionsMonitor<OpenAiOptions>(options),
+            Options.Create(new CalendarRecommendationOptions()),
             httpClient,
             configuration,
             NullLogger<OpenAiInsightService>.Instance);
@@ -117,6 +121,7 @@ public class OpenAiInsightServiceTests
             var contextMessage = messages[2].GetProperty("content").GetString();
             Assert.NotNull(contextMessage);
             Assert.Contains("\"type\":\"chat-query\"", contextMessage!);
+            Assert.Contains("\"calendar\"", contextMessage!);
 
             var userMessage = messages[messages.GetArrayLength() - 1];
             Assert.Equal("user", userMessage.GetProperty("role").GetString());

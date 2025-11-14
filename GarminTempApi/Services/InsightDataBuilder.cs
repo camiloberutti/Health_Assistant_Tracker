@@ -1,10 +1,13 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
 using GarminTempApi.Data;
 using GarminTempApi.Models;
+using GarminTempApi.Configuration;
+using GarminTempApi.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
@@ -118,6 +121,89 @@ public class InsightDataBuilder
             AverageSleepSeconds: averageSleep,
             AverageSteps: averageSteps,
             AverageRestingHeartRate: averageRestingHeartRate);
+    }
+
+    public async Task<CalendarInsightPayload> BuildCalendarInsightAsync(DateTime targetDate, CalendarRecommendationOptions options, CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+
+        var today = DateTime.SpecifyKind(targetDate.Date, DateTimeKind.Local);
+        var lookbackDays = Math.Max(3, options.RaceRecoveryWindowDays);
+        var forwardDays = Math.Max(options.RaceLookaheadDays, Math.Max(options.RacePreparationWindowDays, 4));
+
+        var rangeStartLocal = today.AddDays(-lookbackDays);
+        var rangeEndExclusiveLocal = today.AddDays(forwardDays + 1);
+
+        var rangeStartDate = DateOnly.FromDateTime(rangeStartLocal);
+        var rangeEndExclusiveDate = DateOnly.FromDateTime(rangeEndExclusiveLocal);
+
+        var entities = await _dbContext.RoutineEvents
+            .Where(e =>
+                (!e.IsRecurring && e.StartLocal < rangeEndExclusiveLocal && e.EndLocal >= rangeStartLocal) ||
+                (e.IsRecurring &&
+                 (e.RecurrenceEndLocal ?? DateTime.MaxValue) >= rangeStartLocal &&
+                 (e.RecurrenceStartLocal ?? e.StartLocal) < rangeEndExclusiveLocal))
+            .ToListAsync(cancellationToken);
+
+        var occurrences = new List<RoutineEventToolkit.RoutineEventOccurrence>(capacity: entities.Count);
+
+        foreach (var entity in entities)
+        {
+            if (entity.IsRecurring && !string.IsNullOrWhiteSpace(entity.RecurrenceDays))
+            {
+                occurrences.AddRange(RoutineEventToolkit.ExpandOccurrences(entity, rangeStartDate, rangeEndExclusiveDate));
+            }
+            else if (entity.EndLocal >= rangeStartLocal && entity.StartLocal < rangeEndExclusiveLocal)
+            {
+                occurrences.Add(new RoutineEventToolkit.RoutineEventOccurrence(
+                    entity,
+                    entity.StartLocal.AsLocalTime(),
+                    entity.EndLocal.AsLocalTime(),
+                    Array.Empty<int>()));
+            }
+        }
+
+        occurrences.Sort((a, b) => a.StartLocal.CompareTo(b.StartLocal));
+
+        List<RoutineEventSnapshot> SelectWindow(int startOffsetDays, int dayCount)
+        {
+            var windowStart = today.AddDays(startOffsetDays);
+            var windowEnd = windowStart.AddDays(dayCount);
+
+            return occurrences
+                .Where(o => o.StartLocal >= windowStart && o.StartLocal < windowEnd)
+                .Select(CreateSnapshot)
+                .ToList();
+        }
+
+        var pastThreeDays = SelectWindow(-3, 3);
+        var todayEvents = SelectWindow(0, 1);
+        var tomorrowEvents = SelectWindow(1, 1);
+        var nextThreeDays = SelectWindow(2, 3);
+
+        var raceFocus = occurrences
+            .Where(o => o.Event.IsRace)
+            .Select(o => CreateRaceInsight(o, today, options))
+            .Where(r => r is not null)
+            .Cast<RaceEventInsight>()
+            .DistinctBy(r => (r.Id, DateOnly.FromDateTime(r.StartLocal)))
+            .OrderBy(r => r.StartLocal)
+            .ToList();
+
+        var configuration = new CalendarRaceConfiguration(
+            PreparationWindowDays: options.RacePreparationWindowDays,
+            TaperWindowDays: options.RaceTaperWindowDays,
+            RecoveryWindowDays: options.RaceRecoveryWindowDays,
+            LookaheadDays: options.RaceLookaheadDays);
+
+        return new CalendarInsightPayload(
+            Today: today,
+            PastThreeDays: pastThreeDays,
+            TodayEvents: todayEvents,
+            TomorrowEvents: tomorrowEvents,
+            NextThreeDays: nextThreeDays,
+            RaceFocus: raceFocus,
+            RaceConfiguration: configuration);
     }
 
     public async Task<WeeklyHealthSnapshot> BuildWeeklyHealthSnapshotAsync(DateTime targetDate, int lookbackDays = 7, CancellationToken cancellationToken = default)
@@ -328,6 +414,110 @@ public class InsightDataBuilder
             DistanceKm: distanceKm,
             DurationMinutes: durationMinutes > 0 ? durationMinutes : null,
             Intensity: intensity);
+    }
+
+    private static RoutineEventSnapshot CreateSnapshot(RoutineEventToolkit.RoutineEventOccurrence occurrence)
+    {
+        var entity = occurrence.Event;
+        var recurrenceDays = occurrence.RecurrenceDays.Count == 0
+            ? Array.Empty<int>()
+            : occurrence.RecurrenceDays.ToArray();
+
+        return new RoutineEventSnapshot(
+            Id: entity.Id,
+            Title: entity.Title,
+            Classification: entity.Classification,
+            StartLocal: occurrence.StartLocal,
+            EndLocal: occurrence.EndLocal,
+            IsRace: entity.IsRace,
+            IsRecurring: entity.IsRecurring,
+            RecurrenceDays: recurrenceDays,
+            RecurrenceStartDate: FormatIsoDate(entity.RecurrenceStartLocal),
+            RecurrenceEndDate: FormatIsoDate(entity.RecurrenceEndLocal),
+            RaceName: NormalizeText(entity.RaceName),
+            RaceLocation: NormalizeText(entity.RaceLocation),
+            RaceGoal: NormalizeText(entity.RaceGoal),
+            Notes: NormalizeText(entity.Notes));
+    }
+
+    private static RaceEventInsight? CreateRaceInsight(RoutineEventToolkit.RoutineEventOccurrence occurrence, DateTime today, CalendarRecommendationOptions options)
+    {
+        var eventDate = DateOnly.FromDateTime(occurrence.StartLocal);
+        var todayDate = DateOnly.FromDateTime(today);
+        var daysOffset = eventDate.DayNumber - todayDate.DayNumber;
+
+        var maxAhead = Math.Max(options.RaceLookaheadDays, options.RacePreparationWindowDays);
+        if (daysOffset > maxAhead)
+        {
+            return null;
+        }
+
+        if (daysOffset < -options.RaceRecoveryWindowDays)
+        {
+            return null;
+        }
+
+        var phase = DetermineRacePhase(daysOffset, options);
+
+        return new RaceEventInsight(
+            Id: occurrence.Event.Id,
+            Title: occurrence.Event.Title,
+            RaceName: NormalizeText(occurrence.Event.RaceName),
+            StartLocal: occurrence.StartLocal,
+            EndLocal: occurrence.EndLocal,
+            Classification: occurrence.Event.Classification,
+            Phase: phase,
+            DaysOffset: daysOffset,
+            RaceLocation: NormalizeText(occurrence.Event.RaceLocation),
+            RaceGoal: NormalizeText(occurrence.Event.RaceGoal),
+            Notes: NormalizeText(occurrence.Event.Notes));
+    }
+
+    private static string DetermineRacePhase(int daysOffset, CalendarRecommendationOptions options)
+    {
+        if (daysOffset == 0)
+        {
+            return "race-day";
+        }
+
+        if (daysOffset > 0)
+        {
+            if (daysOffset <= options.RaceTaperWindowDays)
+            {
+                return "taper";
+            }
+
+            if (daysOffset <= options.RacePreparationWindowDays)
+            {
+                return "preparation";
+            }
+
+            return "future";
+        }
+
+        var daysSince = Math.Abs(daysOffset);
+        if (daysSince <= options.RaceRecoveryWindowDays)
+        {
+            return "recovery";
+        }
+
+        return "past";
+    }
+
+    private static string? FormatIsoDate(DateTime? value)
+    {
+        if (value is null)
+        {
+            return null;
+        }
+
+        var local = value.Value.AsLocalTime();
+        return DateOnly.FromDateTime(local).ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+    }
+
+    private static string? NormalizeText(string? value)
+    {
+        return string.IsNullOrWhiteSpace(value) ? null : value.Trim();
     }
 
     private static string ClassifyIntensity(string activityType, double? distanceKm, double durationMinutes)

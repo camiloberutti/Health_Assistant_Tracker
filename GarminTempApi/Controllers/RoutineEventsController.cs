@@ -6,6 +6,7 @@ using System.Linq;
 using System.Threading.Tasks;
 using GarminTempApi.Data;
 using GarminTempApi.Models;
+using GarminTempApi.Utilities;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 
@@ -86,13 +87,13 @@ public class RoutineEventsController : ControllerBase
             UpdatedUtc = now
         };
 
-        var recurrenceDays = NormalizeRecurrenceDays(request.RecurrenceDays);
+    var recurrenceDays = RoutineEventToolkit.NormalizeDays(request.RecurrenceDays);
         DateOnly? recurrenceStart = null;
         DateOnly? recurrenceEnd = null;
 
         if (request.RepeatWeekly)
         {
-            if (recurrenceDays.Length == 0)
+            if (recurrenceDays.Count == 0)
             {
                 return BadRequest("Recurring events require at least one selected weekday.");
             }
@@ -130,15 +131,15 @@ public class RoutineEventsController : ControllerBase
             return BadRequest("Race events require name, location, and goal.");
         }
 
-        entity.IsRecurring = request.RepeatWeekly && recurrenceDays.Length > 0;
+    entity.IsRecurring = request.RepeatWeekly && recurrenceDays.Count > 0;
         if (entity.IsRecurring)
         {
             var startBoundary = recurrenceStart ?? DateOnly.FromDateTime(entity.StartLocal.AsLocalTime());
             var endBoundary = recurrenceEnd ?? startBoundary;
 
-            entity.RecurrenceDays = SerializeDays(recurrenceDays);
-            entity.RecurrenceStartLocal = ToLocalMidnight(startBoundary);
-            entity.RecurrenceEndLocal = ToLocalMidnight(endBoundary);
+            entity.RecurrenceDays = RoutineEventToolkit.SerializeDays(recurrenceDays);
+            entity.RecurrenceStartLocal = RoutineEventToolkit.ToLocalMidnight(startBoundary);
+            entity.RecurrenceEndLocal = RoutineEventToolkit.ToLocalMidnight(endBoundary);
         }
         else
         {
@@ -197,13 +198,13 @@ public class RoutineEventsController : ControllerBase
         entity.Notes = request.Notes?.Trim();
         entity.UpdatedUtc = DateTime.UtcNow;
 
-        var updateRecurrenceDays = NormalizeRecurrenceDays(request.RecurrenceDays);
+    var updateRecurrenceDays = RoutineEventToolkit.NormalizeDays(request.RecurrenceDays);
         DateOnly? updateRecurrenceStart = null;
         DateOnly? updateRecurrenceEnd = null;
 
         if (request.RepeatWeekly)
         {
-            if (updateRecurrenceDays.Length == 0)
+            if (updateRecurrenceDays.Count == 0)
             {
                 return BadRequest("Recurring events require at least one selected weekday.");
             }
@@ -236,15 +237,15 @@ public class RoutineEventsController : ControllerBase
             return BadRequest("Race events require name, location, and goal.");
         }
 
-        entity.IsRecurring = request.RepeatWeekly && updateRecurrenceDays.Length > 0;
+    entity.IsRecurring = request.RepeatWeekly && updateRecurrenceDays.Count > 0;
         if (entity.IsRecurring)
         {
             var startBoundary = updateRecurrenceStart ?? DateOnly.FromDateTime(entity.StartLocal.AsLocalTime());
             var endBoundary = updateRecurrenceEnd ?? startBoundary;
 
-            entity.RecurrenceDays = SerializeDays(updateRecurrenceDays);
-            entity.RecurrenceStartLocal = ToLocalMidnight(startBoundary);
-            entity.RecurrenceEndLocal = ToLocalMidnight(endBoundary);
+            entity.RecurrenceDays = RoutineEventToolkit.SerializeDays(updateRecurrenceDays);
+            entity.RecurrenceStartLocal = RoutineEventToolkit.ToLocalMidnight(startBoundary);
+            entity.RecurrenceEndLocal = RoutineEventToolkit.ToLocalMidnight(endBoundary);
         }
         else
         {
@@ -332,7 +333,7 @@ public class RoutineEventsController : ControllerBase
 
         public static RoutineEventDto FromOccurrence(RoutineEvent entity, DateTime startLocal, DateTime endLocal, IReadOnlyList<int>? recurrenceDays)
         {
-            var days = recurrenceDays ?? ParseDays(entity.RecurrenceDays);
+            var days = recurrenceDays ?? RoutineEventToolkit.ParseDays(entity.RecurrenceDays);
             var isRecurring = entity.IsRecurring && days.Count > 0;
 
             return new RoutineEventDto
@@ -368,108 +369,10 @@ public class RoutineEventsController : ControllerBase
 
     private static IEnumerable<RoutineEventDto> ExpandRecurringOccurrences(RoutineEvent entity, DateOnly rangeStart, DateOnly rangeEndExclusive)
     {
-        var days = ParseDays(entity.RecurrenceDays);
-        if (days.Length == 0)
+        foreach (var occurrence in RoutineEventToolkit.ExpandOccurrences(entity, rangeStart, rangeEndExclusive))
         {
-            yield break;
+            yield return RoutineEventDto.FromOccurrence(entity, occurrence.StartLocal, occurrence.EndLocal, occurrence.RecurrenceDays);
         }
-
-        var daySet = new HashSet<int>(days);
-        var localStart = entity.StartLocal.AsLocalTime();
-        var localEnd = entity.EndLocal.AsLocalTime();
-        var duration = localEnd - localStart;
-        if (duration <= TimeSpan.Zero)
-        {
-            yield return RoutineEventDto.FromEntity(entity);
-            yield break;
-        }
-
-        var recurrenceStart = entity.RecurrenceStartLocal is { } startBoundary
-            ? DateOnly.FromDateTime(startBoundary.AsLocalTime())
-            : DateOnly.FromDateTime(localStart);
-
-        var recurrenceEnd = entity.RecurrenceEndLocal is { } endBoundary
-            ? DateOnly.FromDateTime(endBoundary.AsLocalTime())
-            : DateOnly.MaxValue;
-
-        var inclusiveRangeEnd = rangeEndExclusive > DateOnly.MinValue
-            ? rangeEndExclusive.AddDays(-1)
-            : rangeEndExclusive;
-
-        var iterationStart = MaxDate(rangeStart, recurrenceStart);
-        var iterationEnd = MinDate(inclusiveRangeEnd, recurrenceEnd);
-
-        if (iterationStart > iterationEnd)
-        {
-            yield break;
-        }
-
-        var startTime = TimeOnly.FromDateTime(localStart);
-        var current = iterationStart;
-
-        while (current <= iterationEnd)
-        {
-            if (daySet.Contains((int)current.DayOfWeek))
-            {
-                var occurrenceStart = DateTime.SpecifyKind(current.ToDateTime(startTime), DateTimeKind.Local);
-                var occurrenceEnd = occurrenceStart + duration;
-                yield return RoutineEventDto.FromOccurrence(entity, occurrenceStart, occurrenceEnd, days);
-            }
-
-            if (current == DateOnly.MaxValue)
-            {
-                break;
-            }
-
-            current = current.AddDays(1);
-        }
-    }
-
-    private static DateOnly MaxDate(DateOnly left, DateOnly right) => left > right ? left : right;
-
-    private static DateOnly MinDate(DateOnly left, DateOnly right) => left < right ? left : right;
-
-    private static int[] NormalizeRecurrenceDays(IEnumerable<int>? days)
-    {
-        if (days is null)
-        {
-            return Array.Empty<int>();
-        }
-
-        var set = new SortedSet<int>();
-        foreach (var day in days)
-        {
-            if (day is >= 0 and <= 6)
-            {
-                set.Add(day);
-            }
-        }
-
-        return set.Count == 0 ? Array.Empty<int>() : set.ToArray();
-    }
-
-    private static string SerializeDays(IEnumerable<int> days)
-    {
-        return string.Join(',', days.Select(d => d.ToString(CultureInfo.InvariantCulture)));
-    }
-
-    private static int[] ParseDays(string? value)
-    {
-        if (string.IsNullOrWhiteSpace(value))
-        {
-            return Array.Empty<int>();
-        }
-
-        var set = new SortedSet<int>();
-        foreach (var token in value.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            if (int.TryParse(token, NumberStyles.Integer, CultureInfo.InvariantCulture, out var day) && day is >= 0 and <= 6)
-            {
-                set.Add(day);
-            }
-        }
-
-        return set.Count == 0 ? Array.Empty<int>() : set.ToArray();
     }
 
     private static bool TryParseDateOnly(string? literal, out DateOnly? date)
@@ -496,27 +399,5 @@ public class RoutineEventsController : ControllerBase
         return false;
     }
 
-    private static DateTime ToLocalMidnight(DateOnly date)
-    {
-        return DateTime.SpecifyKind(date.ToDateTime(TimeOnly.MinValue), DateTimeKind.Local);
-    }
 }
 
-internal static class RoutineEventExtensions
-{
-    public static DateTime AsLocalTime(this DateTime value)
-    {
-        return value.Kind switch
-        {
-            DateTimeKind.Local => value,
-            DateTimeKind.Utc => value.ToLocalTime(),
-            _ => DateTime.SpecifyKind(value, DateTimeKind.Local)
-        };
-    }
-
-    public static DateTime StartOfWeek(this DateTime date, DayOfWeek startOfWeek)
-    {
-        var diff = (7 + (date.DayOfWeek - startOfWeek)) % 7;
-        return date.Date.AddDays(-diff);
-    }
-}

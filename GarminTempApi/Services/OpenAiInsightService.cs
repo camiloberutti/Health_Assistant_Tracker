@@ -32,11 +32,13 @@ Do not provide generic advice such as 'sleep between 7-9 hours.'
 Instead, suggest if the user should sleep earlier or later, based on their specific sleep data and activity levels.
 For example, if the user has had several low-intensity days, recommend an increase in activity, or if they've been sedentary, suggest a more active rest day. 
 If the user has had consistent low sleep quality, suggest adjustments to improve recovery based on their activity level.
+Always evaluate upcoming and recent races within the provided preparation, taper, race-day, and recovery windows, adjusting intensity, rest, and nutrition guidance accordingly.
 Always consider the user's specific metrics, and provide insights that are actionable, precise, and avoid repetition.
 Be honest about missing data and avoid inventing numbers.";
 
     private readonly InsightDataBuilder _dataBuilder;
     private readonly IOptionsMonitor<OpenAiOptions> _optionsMonitor;
+    private readonly IOptions<CalendarRecommendationOptions> _calendarOptions;
     private readonly HttpClient _httpClient;
     private readonly IConfiguration _configuration;
     private readonly ILogger<OpenAiInsightService> _logger;
@@ -44,12 +46,14 @@ Be honest about missing data and avoid inventing numbers.";
     public OpenAiInsightService(
         InsightDataBuilder dataBuilder,
         IOptionsMonitor<OpenAiOptions> optionsMonitor,
+        IOptions<CalendarRecommendationOptions> calendarOptions,
         HttpClient httpClient,
         IConfiguration configuration,
         ILogger<OpenAiInsightService> logger)
     {
         _dataBuilder = dataBuilder;
         _optionsMonitor = optionsMonitor;
+        _calendarOptions = calendarOptions;
         _httpClient = httpClient;
         _configuration = configuration;
         _logger = logger;
@@ -63,6 +67,7 @@ Be honest about missing data and avoid inventing numbers.";
         var digest = await _dataBuilder.BuildUserDataDigestAsync(targetDate.Date.AddDays(-13), targetDate.Date, cancellationToken);
         var recommendationContext = _dataBuilder.BuildDailyRecommendationContext(targetDate, digest);
         var weeklySnapshot = await _dataBuilder.BuildWeeklyHealthSnapshotAsync(targetDate, 7, cancellationToken);
+        var calendarContext = await _dataBuilder.BuildCalendarInsightAsync(targetDate, _calendarOptions.Value, cancellationToken);
 
         var payload = new
         {
@@ -70,15 +75,18 @@ Be honest about missing data and avoid inventing numbers.";
             targetDate = targetDate.Date,
             dailyContext = recommendationContext,
             weeklySummary = weeklySnapshot,
-            digest
+            digest,
+            calendar = calendarContext
         };
 
         var userContent = new StringBuilder();
-        userContent.AppendLine("Please craft a personalized, actionable recommendation for the user based on the data.");
-        userContent.AppendLine("Keep the answer under 150 words, and use markdown with bullet points.");
-        userContent.AppendLine("Avoid using the phrase 'Personalized Health recommendation' anywhere in the response.");
-        userContent.AppendLine("Provide specific recommendations on sleep, activity, and rest days. Be specific: suggest whether the user should sleep earlier, how much activity they need, or if they need more rest.");
-        userContent.AppendLine("Incorporate the following context based on the weekly snapshot: sleep quality, step count, and intensity of activities.");
+        userContent.AppendLine("Use the provided data to create precise, athlete-aware coaching for the target day.");
+        userContent.AppendLine("Always integrate calendar events, prioritizing races across preparation, taper, race day, and recovery windows defined in calendar.raceConfiguration.");
+        userContent.AppendLine("If no calendar events are relevant, focus on the health metrics without adding filler advice.");
+        userContent.AppendLine("Return a single JSON object with the exact keys: today_insight, action_12h, tomorrow_preparation, nutrition.");
+        userContent.AppendLine("Each value must be a 45-60 word paragraph so the total stays between 180 and 220 words.");
+        userContent.AppendLine("Reference timing, intensity, recovery, and nutrition strategies that respect the user's scheduled events (especially races) and recent load.");
+        userContent.AppendLine("Do not output markdown, lists, or any text outside the JSON object.");
         userContent.AppendLine("Context:");
         userContent.AppendLine(JsonSerializer.Serialize(payload, SerializerOptions));
 
@@ -129,11 +137,13 @@ Be honest about missing data and avoid inventing numbers.";
         var options = GetValidatedOptions();
         var today = DateTime.UtcNow.Date;
         var digest = await _dataBuilder.BuildUserDataDigestAsync(today.AddDays(-13), today, cancellationToken);
+        var calendarContext = await _dataBuilder.BuildCalendarInsightAsync(today, _calendarOptions.Value, cancellationToken);
 
         var contextPayload = new
         {
             type = "chat-query",
-            digest
+            digest,
+            calendar = calendarContext
         };
 
         var conversation = new List<object>

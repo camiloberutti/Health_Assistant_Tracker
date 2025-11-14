@@ -2,6 +2,7 @@ using System;
 using System.Linq;
 using System.Threading;
 using System.Threading.Tasks;
+using GarminTempApi.Configuration;
 using GarminTempApi.Data;
 using GarminTempApi.Models;
 using GarminTempApi.Services;
@@ -60,6 +61,80 @@ public class InsightDataBuilderTests
         Assert.Equal(50d, contextForDay.RestingHeartRate);
 
         Assert.Equal(new[] { "Cycling", "Run" }, contextForDay.DominantActivityTypes.ToArray());
+    }
+
+    [Fact]
+    public async Task BuildCalendarInsightAsync_IdentifiesRacePhases()
+    {
+        await using var context = CreateContext();
+
+        var today = new DateTime(2025, 11, 10);
+        var tempoStart = DateTime.SpecifyKind(today.AddDays(-1).AddHours(7), DateTimeKind.Local);
+        var raceDayStart = DateTime.SpecifyKind(today.AddHours(8), DateTimeKind.Local);
+        var upcomingRaceStart = DateTime.SpecifyKind(today.AddDays(14).AddHours(7), DateTimeKind.Local);
+        var recentRaceStart = DateTime.SpecifyKind(today.AddDays(-3).AddHours(9), DateTimeKind.Local);
+
+        context.RoutineEvents.AddRange(
+            new RoutineEvent
+            {
+                Title = "Tempo Run",
+                Classification = "Workout",
+                StartLocal = tempoStart,
+                EndLocal = tempoStart.AddHours(1),
+                IsRace = false,
+                Notes = "Threshold session"
+            },
+            new RoutineEvent
+            {
+                Title = "City 10K",
+                Classification = "Race",
+                StartLocal = raceDayStart,
+                EndLocal = raceDayStart.AddHours(2),
+                IsRace = true,
+                RaceName = "City 10K",
+                RaceLocation = "Downtown",
+                RaceGoal = "Finish under 42 mins"
+            },
+            new RoutineEvent
+            {
+                Title = "Autumn Half",
+                Classification = "Race",
+                StartLocal = upcomingRaceStart,
+                EndLocal = upcomingRaceStart.AddHours(2),
+                IsRace = true,
+                RaceName = "Autumn Half",
+                RaceGoal = "Negative split"
+            },
+            new RoutineEvent
+            {
+                Title = "Trail Ultra",
+                Classification = "Race",
+                StartLocal = recentRaceStart,
+                EndLocal = recentRaceStart.AddHours(4),
+                IsRace = true,
+                RaceName = "Trail Ultra"
+            });
+
+        await context.SaveChangesAsync();
+
+        var builder = new InsightDataBuilder(context, NullLogger<InsightDataBuilder>.Instance);
+        var calendar = await builder.BuildCalendarInsightAsync(today, new CalendarRecommendationOptions(), CancellationToken.None);
+
+        Assert.Contains(calendar.TodayEvents, e => e.Title == "City 10K");
+        Assert.Contains(calendar.PastThreeDays, e => e.Title == "Tempo Run");
+
+        var raceDay = calendar.RaceFocus.Single(r => r.Title == "City 10K");
+        Assert.Equal("race-day", raceDay.Phase);
+
+        var upcoming = calendar.RaceFocus.Single(r => r.Title == "Autumn Half");
+        Assert.Equal("preparation", upcoming.Phase);
+
+        var recovery = calendar.RaceFocus.Single(r => r.Title == "Trail Ultra");
+        Assert.Equal("recovery", recovery.Phase);
+
+        Assert.Equal(30, calendar.RaceConfiguration.PreparationWindowDays);
+        Assert.Equal(7, calendar.RaceConfiguration.TaperWindowDays);
+        Assert.Equal(7, calendar.RaceConfiguration.RecoveryWindowDays);
     }
 
     private static async Task SeedSampleDataAsync(AppDbContext context)
