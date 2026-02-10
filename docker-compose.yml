@@ -15,6 +15,7 @@
       - GARMIN_END_DATE=${GARMIN_END_DATE}
       - GARMIN_REFRESH_MINUTES=${GARMIN_REFRESH_MINUTES}
       - GARMIN_MAX_ACTIVITIES=${GARMIN_MAX_ACTIVITIES}
+      - CHATGPT_API_KEY=${CHATGPT_API_KEY}
     volumes:
       - garmin-data:/app/data
     healthcheck:

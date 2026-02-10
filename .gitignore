@@ -52,6 +52,20 @@ docker-compose.override.yml
 *.env
 latest-fetch.json
 
+# Garmin sample / fetch data (may contain PII)
+sleep_sample.json
+sleep_detail_*.json
+swim_fetch.json
+*.fetch.json
+
+# Python virtual environments
+.venv/
+__pycache__/
+*.pyc
+
+# Machine-specific development settings
+GarminTempApi/appsettings.Development.json
+
 # JetBrains Rider
 .idea/
 
