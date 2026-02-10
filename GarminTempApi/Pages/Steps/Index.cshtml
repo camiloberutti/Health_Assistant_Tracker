@@ -36,7 +36,8 @@
                 <div class="text-uppercase small text-muted">Latest day</div>
                 <div class="fw-semibold">@latest.Date.ToString("ddd, dd MMM yy", CultureInfo.InvariantCulture)</div>
                 <div class="small text-muted">
-                    @latest.TotalSteps.ToString("N0") steps &bull; goal @latest.GoalSteps.ToString("N0") &bull; @latest.TotalDistanceKm.ToString("0.0") km
+                    @latest.TotalSteps.ToString("N0") steps &bull; goal @latest.GoalSteps.ToString("N0") &bull;
+                    @latest.TotalDistanceKm.ToString("0.0") km
                 </div>
             </div>
         }
@@ -58,9 +59,7 @@
                         {
                             var def = Model.RangePayloads[key];
                             var isActive = availableRanges[0] == key ? "active" : string.Empty;
-                            <button type="button"
-                                    class="btn btn-outline-primary range-button @isActive"
-                                    data-range="@key">
+                            <button type="button"                    class="btn btn-outline-primary range-button @isActive"  data-range="@key">
                                 @def.DisplayLabel
                             </button>
                         }
@@ -115,406 +114,379 @@
                 </div>
             </div>
         </div>
-
-        <div class="card mt-4">
-            <div class="card-header">
-                Data points
-            </div>
-            <div class="card-body p-0">
-                <div class="table-responsive">
-                    <table class="table table-sm align-middle mb-0" id="periodPointsTable">
-                        <thead class="table-light">
-                            <tr>
-                                <th scope="col">Label</th>
-                                <th scope="col" class="text-end">Steps</th>
-                                <th scope="col" class="text-end">Goal</th>
-                                <th scope="col" class="text-end">Distance (km)</th>
-                                <th scope="col" class="text-end">Active cal</th>
-                                <th scope="col" class="text-end">Total cal</th>
-                            </tr>
-                        </thead>
-                        <tbody>
-                            <tr>
-                                <td colspan="6" class="text-center text-muted py-4">Select a period to view details.</td>
-                            </tr>
-                        </tbody>
-                    </table>
-                </div>
-            </div>
-        </div>
     }
 </div>
 
 @section Scripts {
     <script>
-        window.stepRanges = @Html.Raw(payloadJson);
-        window.stepRangeOrder = @Html.Raw(JsonSerializer.Serialize(availableRanges));
+            window.stepRanges = @Html.Raw(payloadJson);
+            window.stepRangeOrder = @Html.Raw(JsonSerializer.Serialize(availableRanges));
     </script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.4/dist/chart.umd.min.js"></script>
     <script>
         (function () {
-            const rangeData = window.stepRanges || {};
-            const rangeOrder = (window.stepRangeOrder || []).filter(key => rangeData[key]);
-            if (!rangeOrder.length) {
-                return;
-            }
+        const rangeData = window.stepRanges || {};
+        const rangeOrder = (window.stepRangeOrder || []).filter(key => rangeData[key]);
+        if (!rangeOrder.length) {
+        return;
+        }
 
-            const chartCanvas = document.getElementById('stepsChart');
-            const periodSelect = document.getElementById('periodSelect');
-            const earlierBtn = document.getElementById('periodEarlier');
-            const laterBtn = document.getElementById('periodLater');
-            const rangeSubtitleEl = document.getElementById('rangeSubtitle');
-            const periodTitleEl = document.getElementById('periodTitle');
-            const periodSubtitleEl = document.getElementById('periodSubtitle');
-            const periodSampleInfoEl = document.getElementById('periodSampleInfo');
-            const pointsTableBody = document.querySelector('#periodPointsTable tbody');
+        const chartCanvas = document.getElementById('stepsChart');
+        const periodSelect = document.getElementById('periodSelect');
+        const earlierBtn = document.getElementById('periodEarlier');
+        const laterBtn = document.getElementById('periodLater');
+        const rangeSubtitleEl = document.getElementById('rangeSubtitle');
+        const periodTitleEl = document.getElementById('periodTitle');
+        const periodSubtitleEl = document.getElementById('periodSubtitle');
+        const periodSampleInfoEl = document.getElementById('periodSampleInfo');
+        const pointsTableBody = document.querySelector('#periodPointsTable tbody');
 
-            const summary = {
-                totalSteps: document.getElementById('summary-total-steps'),
-                goalSteps: document.getElementById('summary-goal-steps'),
-                averageSteps: document.getElementById('summary-average-steps'),
-                sampleCount: document.getElementById('summary-sample-count'),
-                goalCompletion: document.getElementById('summary-goal-completion'),
-                goalDiff: document.getElementById('summary-goal-diff'),
-                distance: document.getElementById('summary-distance'),
-                averageDistance: document.getElementById('summary-average-distance')
-            };
+        const summary = {
+        totalSteps: document.getElementById('summary-total-steps'),
+        goalSteps: document.getElementById('summary-goal-steps'),
+        averageSteps: document.getElementById('summary-average-steps'),
+        sampleCount: document.getElementById('summary-sample-count'),
+        goalCompletion: document.getElementById('summary-goal-completion'),
+        goalDiff: document.getElementById('summary-goal-diff'),
+        distance: document.getElementById('summary-distance'),
+        averageDistance: document.getElementById('summary-average-distance')
+        };
 
-            const rangeButtons = Array.from(document.querySelectorAll('.range-button'));
-            const numberFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
-            const decimalFormatter = new Intl.NumberFormat(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
-            const distanceFormatter = new Intl.NumberFormat(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 });
-            const percentFormatter = new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 1 });
+        const rangeButtons = Array.from(document.querySelectorAll('.range-button'));
+        const numberFormatter = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 });
+        const decimalFormatter = new Intl.NumberFormat(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 1 });
+        const distanceFormatter = new Intl.NumberFormat(undefined, { minimumFractionDigits: 1, maximumFractionDigits: 2 });
+        const percentFormatter = new Intl.NumberFormat(undefined, { style: 'percent', maximumFractionDigits: 1 });
 
-            let chart;
-            let currentRangeKey = rangeOrder[0];
-            let currentPeriodIndex = 0;
+        let chart;
+        let currentRangeKey = rangeOrder[0];
+        let currentPeriodIndex = 0;
 
-            const stepLabelByRange = {
-                '1d': 'Cumulative steps',
-                '7d': 'Daily steps',
-                '4w': 'Average steps per week',
-                '1y': 'Average steps per month'
-            };
-            const goalLabelByRange = {
-                '1d': 'Target steps',
-                '7d': 'Daily goal',
-                '4w': 'Average goal per day',
-                '1y': 'Average goal per day'
-            };
+        const stepLabelByRange = {
+        '1d': 'Cumulative steps',
+        '7d': 'Daily steps',
+        '4w': 'Average steps per week',
+        '1y': 'Average steps per month'
+        };
+        const goalLabelByRange = {
+        '1d': 'Target steps',
+        '7d': 'Daily goal',
+        '4w': 'Average goal per day',
+        '1y': 'Average goal per day'
+        };
 
-            function formatNumber(value) {
-                if (value === null || value === undefined) {
-                    return '—';
-                }
+        function formatNumber(value) {
+        if (value === null || value === undefined) {
+        return '—';
+        }
 
-                return numberFormatter.format(value);
-            }
+        return numberFormatter.format(value);
+        }
 
-            function formatDecimal(value) {
-                if (value === null || value === undefined) {
-                    return '—';
-                }
+        function formatDecimal(value) {
+        if (value === null || value === undefined) {
+        return '—';
+        }
 
-                return decimalFormatter.format(value);
-            }
+        return decimalFormatter.format(value);
+        }
 
-            function formatDistance(value) {
-                if (value === null || value === undefined) {
-                    return '—';
-                }
+        function formatDistance(value) {
+        if (value === null || value === undefined) {
+        return '—';
+        }
 
-                return distanceFormatter.format(value);
-            }
+        return distanceFormatter.format(value);
+        }
 
-            function formatPercent(value) {
-                if (value === null || value === undefined) {
-                    return '—';
-                }
+        function formatPercent(value) {
+        if (value === null || value === undefined) {
+        return '—';
+        }
 
-                return percentFormatter.format(value);
-            }
+        return percentFormatter.format(value);
+        }
 
-            function setRange(rangeKey) {
-                if (!rangeData[rangeKey]) {
-                    return;
-                }
+        function setRange(rangeKey) {
+        if (!rangeData[rangeKey]) {
+        return;
+        }
 
-                currentRangeKey = rangeKey;
-                const rangeDefinition = rangeData[rangeKey];
-                const periods = rangeDefinition.periods || [];
+        currentRangeKey = rangeKey;
+        const rangeDefinition = rangeData[rangeKey];
+        const periods = rangeDefinition.periods || [];
 
-                rangeButtons.forEach(button => {
-                    button.classList.toggle('active', button.dataset.range === rangeKey);
-                });
+        rangeButtons.forEach(button => {
+        button.classList.toggle('active', button.dataset.range === rangeKey);
+        });
 
-                rangeSubtitleEl.textContent = rangeDefinition.subtitle || '';
-                rangeSubtitleEl.classList.toggle('d-none', !rangeDefinition.subtitle);
+        rangeSubtitleEl.textContent = rangeDefinition.subtitle || '';
+        rangeSubtitleEl.classList.toggle('d-none', !rangeDefinition.subtitle);
 
-                periodSelect.innerHTML = '';
-                periods.forEach((period, index) => {
-                    const option = document.createElement('option');
-                    option.value = String(index);
-                    option.textContent = period.periodLabel;
-                    periodSelect.appendChild(option);
-                });
+        periodSelect.innerHTML = '';
+        periods.forEach((period, index) => {
+        const option = document.createElement('option');
+        option.value = String(index);
+        option.textContent = period.periodLabel;
+        periodSelect.appendChild(option);
+        });
 
-                currentPeriodIndex = 0;
-                if (periods.length > 0) {
-                    periodSelect.value = '0';
-                    updatePeriod(0);
-                } else {
-                    clearDisplay();
-                }
+        currentPeriodIndex = 0;
+        if (periods.length > 0) {
+        periodSelect.value = '0';
+        updatePeriod(0);
+        } else {
+        clearDisplay();
+        }
 
-                updateNavigationButtons();
-            }
+        updateNavigationButtons();
+        }
 
-            function updateNavigationButtons() {
-                const periods = getCurrentPeriods();
-                const hasPeriods = periods.length > 0;
-                earlierBtn.disabled = !hasPeriods || currentPeriodIndex >= periods.length - 1;
-                laterBtn.disabled = !hasPeriods || currentPeriodIndex <= 0;
-            }
+        function updateNavigationButtons() {
+        const periods = getCurrentPeriods();
+        const hasPeriods = periods.length > 0;
+        earlierBtn.disabled = !hasPeriods || currentPeriodIndex >= periods.length - 1;
+        laterBtn.disabled = !hasPeriods || currentPeriodIndex <= 0;
+        }
 
-            function clearDisplay() {
-                periodTitleEl.textContent = 'No data';
-                periodSubtitleEl.textContent = '';
-                periodSubtitleEl.classList.add('d-none');
-                periodSampleInfoEl.textContent = '';
-                periodSampleInfoEl.classList.add('d-none');
-                Object.values(summary).forEach(el => {
-                    el.textContent = '—';
-                });
-                pointsTableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No data available for this range.</td></tr>';
-                if (chart) {
-                    chart.data.labels = [];
-                    chart.data.datasets.forEach(dataset => {
-                        dataset.data = [];
-                    });
-                    chart.update();
-                }
-            }
+        function clearDisplay() {
+        periodTitleEl.textContent = 'No data';
+        periodSubtitleEl.textContent = '';
+        periodSubtitleEl.classList.add('d-none');
+        periodSampleInfoEl.textContent = '';
+        periodSampleInfoEl.classList.add('d-none');
+        Object.values(summary).forEach(el => {
+        el.textContent = '—';
+        });
+        pointsTableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No data available for this range.</td></tr>';
+        if (chart) {
+        chart.data.labels = [];
+        chart.data.datasets.forEach(dataset => {
+        dataset.data = [];
+        });
+        chart.update();
+        }
+        }
 
-            function getCurrentPeriods() {
-                const rangeDefinition = rangeData[currentRangeKey];
-                return rangeDefinition ? (rangeDefinition.periods || []) : [];
-            }
+        function getCurrentPeriods() {
+        const rangeDefinition = rangeData[currentRangeKey];
+        return rangeDefinition ? (rangeDefinition.periods || []) : [];
+        }
 
-            function updatePeriod(index) {
-                const periods = getCurrentPeriods();
-                if (!periods.length) {
-                    clearDisplay();
-                    return;
-                }
+        function updatePeriod(index) {
+        const periods = getCurrentPeriods();
+        if (!periods.length) {
+        clearDisplay();
+        return;
+        }
 
-                const period = periods[index];
-                if (!period) {
-                    return;
-                }
+        const period = periods[index];
+        if (!period) {
+        return;
+        }
 
-                currentPeriodIndex = index;
-                periodSelect.value = String(index);
-                updateNavigationButtons();
+        currentPeriodIndex = index;
+        periodSelect.value = String(index);
+        updateNavigationButtons();
 
-                periodTitleEl.textContent = period.periodLabel;
-                periodSubtitleEl.textContent = period.subtitle || '';
-                periodSubtitleEl.classList.toggle('d-none', !period.subtitle);
+        periodTitleEl.textContent = period.periodLabel;
+        periodSubtitleEl.textContent = period.subtitle || '';
+        periodSubtitleEl.classList.toggle('d-none', !period.subtitle);
 
-                const spanText = buildSampleInfo(period);
-                periodSampleInfoEl.textContent = spanText;
-                periodSampleInfoEl.classList.toggle('d-none', !spanText);
+        const spanText = buildSampleInfo(period);
+        periodSampleInfoEl.textContent = spanText;
+        periodSampleInfoEl.classList.toggle('d-none', !spanText);
 
-                summary.totalSteps.textContent = formatNumber(period.totalSteps);
-                summary.goalSteps.textContent = period.totalGoalSteps > 0
-                    ? `Goal: ${formatNumber(period.totalGoalSteps)}`
-                    : 'Goal: —';
-                summary.averageSteps.textContent = formatDecimal(period.averageSteps);
-                summary.sampleCount.textContent = `Samples: ${period.sampleCount}`;
-                summary.goalCompletion.textContent = formatPercent(period.goalCompletionRate);
-                summary.goalDiff.textContent = buildGoalDiff(period);
-                summary.distance.textContent = formatDistance(period.totalDistanceKm);
-                summary.averageDistance.textContent = period.averageDistanceKm != null
-                    ? `Avg: ${formatDistance(period.averageDistanceKm)}`
-                    : 'Avg: —';
+        summary.totalSteps.textContent = formatNumber(period.totalSteps);
+        summary.goalSteps.textContent = period.totalGoalSteps > 0
+        ? `Goal: ${formatNumber(period.totalGoalSteps)}`
+        : 'Goal: —';
+        summary.averageSteps.textContent = formatDecimal(period.averageSteps);
+        summary.sampleCount.textContent = `Samples: ${period.sampleCount}`;
+        summary.goalCompletion.textContent = formatPercent(period.goalCompletionRate);
+        summary.goalDiff.textContent = buildGoalDiff(period);
+        summary.distance.textContent = formatDistance(period.totalDistanceKm);
+        summary.averageDistance.textContent = period.averageDistanceKm != null
+        ? `Avg: ${formatDistance(period.averageDistanceKm)}`
+        : 'Avg: —';
 
-                updateChart(period);
-                updateTable(period);
-            }
+        updateChart(period);
+        updateTable(period);
+        }
 
-            function buildGoalDiff(period) {
-                if (period.goalCompletionRate === null || period.goalCompletionRate === undefined || period.totalGoalSteps <= 0) {
-                    return 'No goal data recorded.';
-                }
+        function buildGoalDiff(period) {
+        if (period.goalCompletionRate === null || period.goalCompletionRate === undefined || period.totalGoalSteps <= 0) {
+        return 'No goal data recorded.';
+        }
 
-                if (period.goalCompletionRate === 1) {
-                    return 'Met your goal.';
-                }
+        if (period.goalCompletionRate === 1) {
+        return 'Met your goal.';
+        }
 
-                if (period.goalCompletionRate > 1) {
-                    const diff = period.totalSteps - period.totalGoalSteps;
-                    return `Exceeded goal by ${formatNumber(diff)} steps.`;
-                }
+        if (period.goalCompletionRate > 1) {
+        const diff = period.totalSteps - period.totalGoalSteps;
+        return `Exceeded goal by ${formatNumber(diff)} steps.`;
+        }
 
-                const deficit = period.totalGoalSteps - period.totalSteps;
-                return `Short by ${formatNumber(deficit)} steps.`;
-            }
+        const deficit = period.totalGoalSteps - period.totalSteps;
+        return `Short by ${formatNumber(deficit)} steps.`;
+        }
 
-            function buildSampleInfo(period) {
-                const start = period.periodStart ? new Date(period.periodStart) : null;
-                const end = period.periodEnd ? new Date(period.periodEnd) : null;
-                if (start && end) {
-                    if (start.toDateString() === end.toDateString()) {
-                        return `${start.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} • ${period.sampleCount} sample`;
-                    }
+        function buildSampleInfo(period) {
+        const start = period.periodStart ? new Date(period.periodStart) : null;
+        const end = period.periodEnd ? new Date(period.periodEnd) : null;
+        if (start && end) {
+        if (start.toDateString() === end.toDateString()) {
+        return `${start.toLocaleDateString(undefined, { weekday: 'short', month: 'short', day: 'numeric' })} • ${period.sampleCount} sample`;
+        }
 
-                    const range = `${start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
-                    return `${range} • ${period.sampleCount} sample${period.sampleCount === 1 ? '' : 's'}`;
-                }
+        const range = `${start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} - ${end.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}`;
+        return `${range} • ${period.sampleCount} sample${period.sampleCount === 1 ? '' : 's'}`;
+        }
 
-                return period.sampleCount ? `${period.sampleCount} sample${period.sampleCount === 1 ? '' : 's'}` : '';
-            }
+        return period.sampleCount ? `${period.sampleCount} sample${period.sampleCount === 1 ? '' : 's'}` : '';
+        }
 
-            function updateChart(period) {
-                if (!chartCanvas) {
-                    return;
-                }
+        function updateChart(period) {
+        if (!chartCanvas) {
+        return;
+        }
 
-                const labels = (period.points || []).map(point => point.label);
-                const stepValues = (period.points || []).map(point => point.steps);
-                const goalValues = (period.points || []).map(point => point.goalSteps);
+        const labels = (period.points || []).map(point => point.label);
+        const stepValues = (period.points || []).map(point => point.steps);
+        const goalValues = (period.points || []).map(point => point.goalSteps);
 
-                const stepsLabel = stepLabelByRange[currentRangeKey] || 'Steps';
-                const goalLabel = goalLabelByRange[currentRangeKey] || 'Goal';
+        const stepsLabel = stepLabelByRange[currentRangeKey] || 'Steps';
+        const goalLabel = goalLabelByRange[currentRangeKey] || 'Goal';
 
-                const datasets = [
-                    {
-                        label: stepsLabel,
-                        data: stepValues,
-                        borderColor: '#0d6efd',
-                        backgroundColor: 'rgba(13,110,253,0.08)',
-                        pointRadius: Math.min(4, Math.max(2, Math.ceil(60 / Math.max(1, labels.length)))),
-                        tension: 0.3,
-                        fill: false
-                    },
-                    {
-                        label: goalLabel,
-                        data: goalValues,
-                        borderColor: '#6c757d',
-                        borderDash: [6, 4],
-                        pointRadius: 0,
-                        tension: 0.3,
-                        fill: false
-                    }
-                ];
+        const datasets = [
+        {
+        label: stepsLabel,
+        data: stepValues,
+        borderColor: '#0d6efd',
+        backgroundColor: 'rgba(13,110,253,0.08)',
+        pointRadius: Math.min(4, Math.max(2, Math.ceil(60 / Math.max(1, labels.length)))),
+        tension: 0.3,
+        fill: false
+        },
+        {
+        label: goalLabel,
+        data: goalValues,
+        borderColor: '#6c757d',
+        borderDash: [6, 4],
+        pointRadius: 0,
+        stepped: true,
+        fill: false
+        }
+        ];
 
-                const tooltipFormatter = value => numberFormatter.format(value);
+        const tooltipFormatter = value => numberFormatter.format(value);
 
-                if (!chart) {
-                    chart = new Chart(chartCanvas, {
-                        type: 'line',
-                        data: {
-                            labels,
-                            datasets
-                        },
-                        options: {
-                            responsive: true,
-                            maintainAspectRatio: false,
-                            interaction: {
-                                intersect: false,
-                                mode: 'nearest'
-                            },
-                            scales: {
-                                y: {
-                                    ticks: {
-                                        callback: val => numberFormatter.format(val)
-                                    },
-                                    beginAtZero: true
-                                }
-                            },
-                            plugins: {
-                                legend: {
-                                    display: true
-                                },
-                                tooltip: {
-                                    callbacks: {
-                                        label(context) {
-                                            const label = context.dataset.label || '';
-                                            const value = context.parsed.y;
-                                            if (value === null || value === undefined) {
-                                                return label;
-                                            }
+        if (!chart) {
+        chart = new Chart(chartCanvas, {
+        type: 'line',
+        data: {
+        labels,
+        datasets
+        },
+        options: {
+        responsive: true,
+        maintainAspectRatio: false,
+        interaction: {
+        intersect: false,
+        mode: 'nearest'
+        },
+        scales: {
+        y: {
+        ticks: {
+        callback: val => numberFormatter.format(val)
+        },
+        beginAtZero: true
+        }
+        },
+        plugins: {
+        legend: {
+        display: true
+        },
+        tooltip: {
+        callbacks: {
+        label(context) {
+        const label = context.dataset.label || '';
+        const value = context.parsed.y;
+        if (value === null || value === undefined) {
+        return label;
+        }
 
-                                            return `${label}: ${tooltipFormatter(value)}`;
-                                        }
-                                    }
-                                }
-                            }
-                        }
-                    });
-                } else {
-                    chart.data.labels = labels;
-                    chart.data.datasets[0].label = stepsLabel;
-                    chart.data.datasets[0].data = stepValues;
-                    chart.data.datasets[1].label = goalLabel;
-                    chart.data.datasets[1].data = goalValues;
-                    chart.update();
-                }
-            }
+        return `${label}: ${tooltipFormatter(value)}`;
+        }
+        }
+        }
+        }
+        }
+        });
+        } else {
+        chart.data.labels = labels;
+        chart.data.datasets[0].label = stepsLabel;
+        chart.data.datasets[0].data = stepValues;
+        chart.data.datasets[1].label = goalLabel;
+        chart.data.datasets[1].data = goalValues;
+        chart.update();
+        }
+        }
 
-            function updateTable(period) {
-                const points = period.points || [];
-                if (!points.length) {
-                    pointsTableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No point data recorded for this period.</td></tr>';
-                    return;
-                }
+        function updateTable(period) {
+        const points = period.points || [];
+        if (!points.length) {
+        pointsTableBody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4">No point data recorded for this period.</td></tr>';
+        return;
+        }
 
-                const rows = points.map(point => {
-                    const tr = document.createElement('tr');
-                    tr.innerHTML = `
-                        <td>${point.label}</td>
-                        <td class="text-end">${formatNumber(point.steps)}</td>
-                        <td class="text-end">${formatNumber(point.goalSteps)}</td>
-                        <td class="text-end">${formatDistance(point.distanceKm)}</td>
-                        <td class="text-end">${formatNumber(point.activeCalories)}</td>
-                        <td class="text-end">${formatNumber(point.totalCalories)}</td>
-                    `;
-                    return tr;
-                });
+        const rows = points.map(point => {
+        const tr = document.createElement('tr');
+        tr.innerHTML = `
+        <td>${point.label}</td>
+        <td class="text-end">${formatNumber(point.steps)}</td>
+        <td class="text-end">${formatNumber(point.goalSteps)}</td>
+        <td class="text-end">${formatDistance(point.distanceKm)}</td>
+        <td class="text-end">${formatNumber(point.activeCalories)}</td>
+        <td class="text-end">${formatNumber(point.totalCalories)}</td>
+        `;
+        return tr;
+        });
 
-                pointsTableBody.innerHTML = '';
-                rows.forEach(row => pointsTableBody.appendChild(row));
-            }
+        pointsTableBody.innerHTML = '';
+        rows.forEach(row => pointsTableBody.appendChild(row));
+        }
 
-            rangeButtons.forEach(button => {
-                button.addEventListener('click', () => {
-                    if (button.dataset.range) {
-                        setRange(button.dataset.range);
-                    }
-                });
-            });
+        rangeButtons.forEach(button => {
+        button.addEventListener('click', () => {
+        if (button.dataset.range) {
+        setRange(button.dataset.range);
+        }
+        });
+        });
 
-            periodSelect.addEventListener('change', event => {
-                const value = Number(event.target.value);
-                if (!Number.isNaN(value)) {
-                    updatePeriod(value);
-                }
-            });
+        periodSelect.addEventListener('change', event => {
+        const value = Number(event.target.value);
+        if (!Number.isNaN(value)) {
+        updatePeriod(value);
+        }
+        });
 
-            earlierBtn.addEventListener('click', () => {
-                const periods = getCurrentPeriods();
-                if (currentPeriodIndex < periods.length - 1) {
-                    updatePeriod(currentPeriodIndex + 1);
-                }
-            });
+        earlierBtn.addEventListener('click', () => {
+        const periods = getCurrentPeriods();
+        if (currentPeriodIndex < periods.length - 1) {
+        updatePeriod(currentPeriodIndex + 1);
+        }
+        });
 
-            laterBtn.addEventListener('click', () => {
-                if (currentPeriodIndex > 0) {
-                    updatePeriod(currentPeriodIndex - 1);
-                }
-            });
+        laterBtn.addEventListener('click', () => {
+        if (currentPeriodIndex > 0) {
+        updatePeriod(currentPeriodIndex - 1);
+        }
+        });
 
-            setRange(currentRangeKey);
+        setRange(currentRangeKey);
         })();
     </script>
 }

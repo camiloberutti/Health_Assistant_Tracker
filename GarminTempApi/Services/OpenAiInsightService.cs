@@ -26,15 +26,15 @@ public class OpenAiInsightService : IOpenAiInsightService
     };
 
     private const string DefaultSystemPrompt = @"
-You are a knowledgeable health expert. 
-Your task is to provide clear, actionable, and precise health insights based on the user's recent activity, sleep, and recovery patterns. 
-Do not provide generic advice such as 'sleep between 7-9 hours.' 
-Instead, suggest if the user should sleep earlier or later, based on their specific sleep data and activity levels.
-For example, if the user has had several low-intensity days, recommend an increase in activity, or if they've been sedentary, suggest a more active rest day. 
-If the user has had consistent low sleep quality, suggest adjustments to improve recovery based on their activity level.
-Always evaluate upcoming and recent races within the provided preparation, taper, race-day, and recovery windows, adjusting intensity, rest, and nutrition guidance accordingly.
-Always consider the user's specific metrics, and provide insights that are actionable, precise, and avoid repetition.
-Be honest about missing data and avoid inventing numbers.";
+You are an Elite Sports Performance Coach with deep expertise in exercise physiology, sleep science, and endurance training.
+Your goal is to maximize the user's athletic performance, recovery, and long-term health.
+    
+GUIDELINES:
+1. **Be Specific & Data-Driven**: unexpected changes in Resting Heart Rate (RHR) or Body Battery are your key signals. Connect sleep quality to previous day's training load.
+2. **Avoid Platitudes**: Never say ""make sure to sleep well"" or ""listen to your body"" without specific context. Instead say ""Your RHR is up 5 beats; prioritize sleep extension tonight.""
+3. **Context Awareness**: If the user has a race coming up (check the calendar context), every advice must support that goal (tapering, fueling, sharpening).
+4. **Tone**: Professional, direct, encouraging, but firm when recovery is needed.
+5. **Honesty**: If data is missing, acknowledge it briefly or infer cautiously based on available trends. Do not hallucinate metrics.";
 
     private readonly InsightDataBuilder _dataBuilder;
     private readonly IOptionsMonitor<OpenAiOptions> _optionsMonitor;
@@ -80,14 +80,18 @@ Be honest about missing data and avoid inventing numbers.";
         };
 
         var userContent = new StringBuilder();
-        userContent.AppendLine("Use the provided data to create precise, athlete-aware coaching for the target day.");
-        userContent.AppendLine("Always integrate calendar events, prioritizing races across preparation, taper, race day, and recovery windows defined in calendar.raceConfiguration.");
-        userContent.AppendLine("If no calendar events are relevant, focus on the health metrics without adding filler advice.");
-        userContent.AppendLine("Return a single JSON object with the exact keys: today_insight, action_12h, tomorrow_preparation, nutrition.");
-        userContent.AppendLine("Each value must be a 45-60 word paragraph so the total stays between 180 and 220 words.");
-        userContent.AppendLine("Reference timing, intensity, recovery, and nutrition strategies that respect the user's scheduled events (especially races) and recent load.");
-        userContent.AppendLine("Do not output markdown, lists, or any text outside the JSON object.");
-        userContent.AppendLine("Context:");
+        userContent.AppendLine("ANALYZE THE DATA AND GENERATE A DAILY REPORT.");
+        userContent.AppendLine("1. **Synthesize**: Look at the last 3 days of 'digest' activity vs sleep. Is the user recovering or accumulating fatigue?");
+        userContent.AppendLine("2. **Calendar**: Check 'calendar' for upcoming races. Adjust advice for Taper, Race Day, or Recovery phase.");
+        userContent.AppendLine("3. **Output**: Return a SINGLE JSON OBJECT. No markdown formatting, no code blocks, just the raw JSON.");
+
+        userContent.AppendLine("JSON Structure Requirement:");
+        userContent.AppendLine("{");
+        userContent.AppendLine("  \"recent_summary\": \"Recap of the last few days of activity/sleep. Highlight trends better than single day analysis. (MAX 40 words)\",");
+        userContent.AppendLine("  \"upcoming_outlook\": \"Look ahead based on 'calendar' events and current recovery status. What should the user focus on next? (MAX 40 words)\"");
+        userContent.AppendLine("}");
+
+        userContent.AppendLine("Context Payload:");
         userContent.AppendLine(JsonSerializer.Serialize(payload, SerializerOptions));
 
         var messages = new List<object>
@@ -149,8 +153,8 @@ Be honest about missing data and avoid inventing numbers.";
         var conversation = new List<object>
         {
             BuildMessage("system", DefaultSystemPrompt),
-            BuildMessage("system", "Answer the user's question using the available data. Be transparent about gaps and keep replies under 180 words. Use markdown paragraphs or bullet points when helpful."),
-            BuildMessage("system", $"Context:\n{JsonSerializer.Serialize(contextPayload, SerializerOptions)}")
+            BuildMessage("system", "You are in 'Chat Mode'. Help the user explore their data. Be conversational but concise. Use Markdown for clarity (bolding key numbers, lists for steps). If they ask 'How am I doing?', give a summary of the last 3 days."),
+            BuildMessage("system", $"User Data Context:\n{JsonSerializer.Serialize(contextPayload, SerializerOptions)}")
         };
 
         foreach (var message in sanitized.TakeLast(20))

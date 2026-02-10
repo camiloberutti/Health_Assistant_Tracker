@@ -6,7 +6,7 @@
     container_name: garmin-web
     restart: always
     ports:
-      - "5000:80"
+      - "5000:8080"
     environment:
       - APP_DATA_DIR=/app/data
       - GARMIN_USERNAME=${GARMIN_USERNAME}

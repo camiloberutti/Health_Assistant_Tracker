@@ -127,15 +127,11 @@ public record CalendarRaceConfiguration(
 );
 
 public record DailyRecommendationSections(
-    string TodayInsight,
-    string Action12h,
-    string TomorrowPreparation,
-    string Nutrition
+    string RecentSummary,
+    string UpcomingOutlook
 );
 
 public record DailyRecommendationHtmlSections(
-    string TodayInsight,
-    string Action12h,
-    string TomorrowPreparation,
-    string Nutrition
+    string RecentSummary,
+    string UpcomingOutlook
 );

@@ -164,3 +164,9 @@ This application accesses Garmin Connect data through the unofficial [`garmincon
 
 This repository is released under the **MIT License** — see the [LICENSE](LICENSE) file for details.
 
+---
+
+## User Guide
+
+Check out the [User Guide](docs/USER_GUIDE.md) for screenshots and a feature walkthrough.
+

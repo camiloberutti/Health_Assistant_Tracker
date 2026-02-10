@@ -28,12 +28,13 @@
     <div>
         <h2 class="mb-1">@activity.Name</h2>
         <p class="activity-meta mb-0">
-            @activityLocalStart.ToString("dd MMM yy HH:mm", CultureInfo.InvariantCulture) · @(activity.DistanceMeters / 1000.0).ToString("0.00") km ·
+            @activityLocalStart.ToString("dd MMM yy HH:mm", CultureInfo.InvariantCulture) · @(activity.DistanceMeters /
+            1000.0).ToString("0.00") km ·
             @activity.Duration.ToString(@"hh\:mm\:ss")
         </p>
     </div>
     <div class="activity-badges d-flex gap-2">
-    <span class="badge bg-primary-subtle text-primary-emphasis text-uppercase">@Model.ActivityDisplayType</span>
+        <span class="badge bg-primary-subtle text-primary-emphasis text-uppercase">@Model.ActivityDisplayType</span>
         <span class="badge bg-secondary-subtle text-secondary-emphasis">Source: @activity.Source</span>
         <span class="badge bg-light text-muted">ID: @activity.ExternalId</span>
     </div>
@@ -41,56 +42,44 @@
 
 @if (Model.Detail?.FetchedAtUtc is DateTime fetchedAtUtc)
 {
-    <p class="text-muted small mb-4">Detailed data fetched @fetchedAtUtc.ToLocalTime().ToString("dd MMM yy HH:mm", CultureInfo.InvariantCulture).</p>
-}
+    <p class="text-muted small mb-4">Detailed data fetched @fetchedAtUtc.ToLocalTime().ToString("dd MMM yy HH:mm",
+            CultureInfo.InvariantCulture).</p>
+    }
 
-<a class="btn btn-outline-secondary btn-sm mb-4" href="/Activities">&larr; Back to activities</a>
+    <a class="btn btn-outline-secondary btn-sm mb-4" href="/Activities">&larr; Back to activities</a>
 
-@if (Model.DetailErrors.Count > 0)
-{
-    <div class="alert alert-warning">
-        <h5 class="alert-heading mb-2">Garmin detail warnings</h5>
-        <ul class="mb-0">
-            @foreach (var warning in Model.DetailErrors)
+    @if (Model.DetailErrors.Count > 0)
+    {
+        <div class="alert alert-warning">
+            <h5 class="alert-heading mb-2">Garmin detail warnings</h5>
+            <ul class="mb-0">
+                @foreach (var warning in Model.DetailErrors)
+                {
+                    <li><strong>@warning.Key</strong>: @warning.Value</li>
+                }
+            </ul>
+        </div>
+    }
+
+    @if (Model.SummaryMetrics.Count > 0)
+    {
+        <h3 class="mt-4">@Model.ActivityDisplayType Summary</h3>
+        <div class="row g-3 mb-4">
+            @foreach (var metric in Model.SummaryMetrics)
             {
-                <li><strong>@warning.Key</strong>: @warning.Value</li>
-            }
-        </ul>
-    </div>
-}
-
-@if (Model.SummaryMetrics.Count > 0)
-{
-    <h3 class="mt-4">@Model.ActivityDisplayType Summary</h3>
-    <div class="row g-3 mb-4">
-        @foreach (var metric in Model.SummaryMetrics)
-        {
-            <div class="col-sm-6 col-lg-3">
-                <div class="card h-100 shadow-sm">
-                    <div class="card-body py-3">
-                        <p class="text-muted text-uppercase small mb-1">@metric.Label</p>
-                        <strong class="fs-5">@metric.Value</strong>
+                <div class="col-sm-6 col-lg-3">
+                    <div class="card h-100 shadow-sm">
+                        <div class="card-body py-3">
+                            <p class="text-muted text-uppercase small mb-1">@metric.Label</p>
+                            <strong class="fs-5">@metric.Value</strong>
+                        </div>
                     </div>
                 </div>
-            </div>
-        }
-    </div>
-}
-
-@if (!string.IsNullOrWhiteSpace(Model.DetailPartial))
-{
-    @await Html.PartialAsync(Model.DetailPartial, Model)
-}
-
-@if (Model.JsonBlocks.Count > 0)
-{
-    <h3 class="mt-4">Garmin Raw Payload</h3>
-    @foreach (var block in Model.JsonBlocks)
-    {
-        <details class="mb-3">
-            <summary class="fw-semibold">@block.Title</summary>
-            <pre class="json-block border rounded p-3 small mb-0">@block.Json</pre>
-        </details>
+            }
+        </div>
     }
-}
 
+    @if (!string.IsNullOrWhiteSpace(Model.DetailPartial))
+    {
+        @await Html.PartialAsync(Model.DetailPartial, Model)
+    }

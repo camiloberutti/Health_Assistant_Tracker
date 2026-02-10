@@ -29,11 +29,6 @@
 <section class="mb-5">
     <div class="card shadow-sm border-0 insights-card">
         <div class="card-body d-flex flex-column gap-3">
-            <div class="d-flex justify-content-end">
-                <span class="insights-icon text-primary">
-                    <i class="bi-stars"></i>
-                </span>
-            </div>
             @if (Model.DailyRecommendationHtmlSections is not null)
             {
                 var htmlSections = Model.DailyRecommendationHtmlSections;
@@ -41,9 +36,9 @@
                     <div class="col">
                         <article class="card h-100 border-0 shadow-sm">
                             <div class="card-body d-flex flex-column gap-2">
-                                <div class="text-uppercase small text-muted fw-semibold">Today Focus</div>
+                                <div class="text-uppercase small text-muted fw-semibold">Recent Summary</div>
                                 <div class="insights-content text-muted">
-                                    @Html.Raw(htmlSections.TodayInsight)
+                                    @Html.Raw(htmlSections.RecentSummary)
                                 </div>
                             </div>
                         </article>
@@ -51,29 +46,9 @@
                     <div class="col">
                         <article class="card h-100 border-0 shadow-sm">
                             <div class="card-body d-flex flex-column gap-2">
-                                <div class="text-uppercase small text-muted fw-semibold">Next 12 Hours</div>
+                                <div class="text-uppercase small text-muted fw-semibold">Upcoming Outlook (Calendar)</div>
                                 <div class="insights-content text-muted">
-                                    @Html.Raw(htmlSections.Action12h)
-                                </div>
-                            </div>
-                        </article>
-                    </div>
-                    <div class="col">
-                        <article class="card h-100 border-0 shadow-sm">
-                            <div class="card-body d-flex flex-column gap-2">
-                                <div class="text-uppercase small text-muted fw-semibold">Tomorrow Prep</div>
-                                <div class="insights-content text-muted">
-                                    @Html.Raw(htmlSections.TomorrowPreparation)
-                                </div>
-                            </div>
-                        </article>
-                    </div>
-                    <div class="col">
-                        <article class="card h-100 border-0 shadow-sm">
-                            <div class="card-body d-flex flex-column gap-2">
-                                <div class="text-uppercase small text-muted fw-semibold">Nutrition</div>
-                                <div class="insights-content text-muted">
-                                    @Html.Raw(htmlSections.Nutrition)
+                                    @Html.Raw(htmlSections.UpcomingOutlook)
                                 </div>
                             </div>
                         </article>
@@ -88,13 +63,6 @@
             {
                 <p class="text-muted mb-0">Daily recommendations will appear once your latest data syncs.</p>
             }
-
-            <div class="d-flex flex-wrap align-items-center gap-2 insights-feedback mt-2">
-                <span class="text-muted small">Was this helpful?</span>
-                <button type="button" class="btn btn-outline-success btn-sm" data-feedback="true">Yes</button>
-                <button type="button" class="btn btn-outline-secondary btn-sm" data-feedback="false">Needs work</button>
-                <span id="insightsFeedbackStatus" class="text-muted small"></span>
-            </div>
         </div>
     </div>
 </section>
@@ -102,14 +70,16 @@
 @if (Model.Summary?.Cards?.Count > 0)
 {
     <section class="mb-5">
-        <div class="d-flex align-items-baseline justify-content-between mb-3 flex-wrap gap-2">
-            <h2 class="h4 mb-0">Your day</h2>
-            <div class="text-muted small d-flex flex-wrap gap-2">
+        <div class="d-flex align-items-center justify-content-between mb-4 pb-2 border-bottom">
+            <div>
+                <h2 class="display-6 mb-0 fw-bold text-primary">Your Day</h2>
                 @if (Model.Summary.LatestDataDate is not null)
                 {
-                    <span>@FormatDateOnly(Model.Summary.LatestDataDate)</span>
+                    <span class="text-muted">@FormatDateOnly(Model.Summary.LatestDataDate)</span>
                 }
-                <span>Updated @FormatDateTime(Model.Summary.GeneratedUtc)</span>
+            </div>
+            <div class="text-end">
+                <span class="badge bg-light text-dark border">Updated @FormatDateTime(Model.Summary.GeneratedUtc)</span>
             </div>
         </div>
         <div class="row row-cols-1 row-cols-md-2 row-cols-xl-3 g-4">
@@ -133,13 +103,13 @@
                                         {
                                             <svg class="icon-steps" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                                                 <path
-                                                    d="M4.75 13.75V11.5c0-1.8 1.45-3.25 3.25-3.25h1.15c.63 0 1.22-.3 1.59-.82l1.34-1.85a2 2 0 011.63-.83h1.25c.77 0 1.49.37 1.94.99l1.12 1.57a3.5 3.5 0 001.86 1.29l2.34.64c.88.24 1.53 1.04 1.53 1.95V14a3.5 3.5 0 01-3.5 3.5H6.75a2 2 0 01-2-2Z"
-                                                    fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
-                                                    stroke-linejoin="round" />
+                                                d="M4.75 13.75V11.5c0-1.8 1.45-3.25 3.25-3.25h1.15c.63 0 1.22-.3 1.59-.82l1.34-1.85a2 2 0 011.63-.83h1.25c.77 0 1.49.37 1.94.99l1.12 1.57a3.5 3.5 0 001.86 1.29l2.34.64c.88.24 1.53 1.04 1.53 1.95V14a3.5 3.5 0 01-3.5 3.5H6.75a2 2 0 01-2-2Z"
+                                                fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+                                                stroke-linejoin="round" />
                                                 <path d="M5.5 16.5H17.5" fill="none" stroke="currentColor" stroke-width="1.6"
-                                                    stroke-linecap="round" stroke-linejoin="round" />
+                                                      stroke-linecap="round" stroke-linejoin="round" />
                                                 <path d="M9.5 11.5h3" fill="none" stroke="currentColor" stroke-width="1.6"
-                                                    stroke-linecap="round" />
+                                                      stroke-linecap="round" />
                                             </svg>
                                         }
                                         else

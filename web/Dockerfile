@@ -46,5 +46,5 @@ COPY --from=build /app/publish .
 RUN mkdir -p /app/data
 
 # Expose port and define entrypoint
-EXPOSE 80
+EXPOSE 8080
 ENTRYPOINT ["dotnet", "GarminTempApi.dll"]

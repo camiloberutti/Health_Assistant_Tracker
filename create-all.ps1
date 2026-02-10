@@ -1,10 +1,10 @@
 <#
 create-all.ps1
 Creates a new ASP.NET Core project scaffold + Docker + GarminDB files inside:
-C:\Users\camil\Desktop\App_Garmin
+the script's directory.
 #>
 
-$root = "C:\Users\camil\Desktop\App_Garmin"
+$root = $PSScriptRoot
 if (-not (Test-Path $root)) { New-Item -ItemType Directory -Path $root | Out-Null }
 
 Write-Host "Creating project scaffold in $root"
@@ -87,7 +87,7 @@ $appsettings = @'
     "Default": "Data Source=garmin_temp.db"
   },
   "GarminDb": {
-    "Path": "C:\\Users\\camil\\.GarminDb\\databases\\garmin.sqlite"
+    "Path": "garmin.sqlite"
   },
   "Logging": {
     "LogLevel": {

@@ -31,20 +31,16 @@ internal static class RecommendationParser
                     : null;
             }
 
-            var today = ReadString("today_insight");
-            var action = ReadString("action_12h");
-            var tomorrow = ReadString("tomorrow_preparation");
-            var nutrition = ReadString("nutrition");
+            var recent_summary = ReadString("recent_summary");
+            var upcoming_outlook = ReadString("upcoming_outlook");
 
-            if (string.IsNullOrWhiteSpace(today) ||
-                string.IsNullOrWhiteSpace(action) ||
-                string.IsNullOrWhiteSpace(tomorrow) ||
-                string.IsNullOrWhiteSpace(nutrition))
+            if (string.IsNullOrWhiteSpace(recent_summary) ||
+                string.IsNullOrWhiteSpace(upcoming_outlook))
             {
                 return false;
             }
 
-            sections = new DailyRecommendationSections(today!, action!, tomorrow!, nutrition!);
+            sections = new DailyRecommendationSections(recent_summary!, upcoming_outlook!);
             return true;
         }
         catch (JsonException)
@@ -56,10 +52,8 @@ internal static class RecommendationParser
     public static DailyRecommendationHtmlSections ToHtmlSections(DailyRecommendationSections sections)
     {
         return new DailyRecommendationHtmlSections(
-            MarkdownRenderer.ToHtml(sections.TodayInsight),
-            MarkdownRenderer.ToHtml(sections.Action12h),
-            MarkdownRenderer.ToHtml(sections.TomorrowPreparation),
-            MarkdownRenderer.ToHtml(sections.Nutrition));
+            MarkdownRenderer.ToHtml(sections.RecentSummary),
+            MarkdownRenderer.ToHtml(sections.UpcomingOutlook));
     }
 
     public static string CombineHtml(DailyRecommendationHtmlSections htmlSections)
@@ -67,10 +61,8 @@ internal static class RecommendationParser
         return string.Join(Environment.NewLine,
             new[]
             {
-                htmlSections.TodayInsight,
-                htmlSections.Action12h,
-                htmlSections.TomorrowPreparation,
-                htmlSections.Nutrition
+                htmlSections.RecentSummary,
+                htmlSections.UpcomingOutlook
             }.Where(static block => !string.IsNullOrWhiteSpace(block)));
     }
 }
