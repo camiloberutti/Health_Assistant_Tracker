@@ -2,6 +2,7 @@ using System;
 using System.Threading;
 using System.Threading.Tasks;
 using GarminTempApi.Services;
+using GarminTempApi.Utilities;
 using Microsoft.AspNetCore.Mvc.RazorPages;
 using Microsoft.Extensions.Logging;
 
@@ -30,6 +31,8 @@ public class IndexModel : PageModel
     public DashboardSummary? Summary { get; private set; }
     public string? DailyRecommendation { get; private set; }
     public string? DailyRecommendationError { get; private set; }
+    public DailyRecommendationSections? DailyRecommendationSections { get; private set; }
+    public DailyRecommendationHtmlSections? DailyRecommendationHtmlSections { get; private set; }
 
     public async Task OnGetAsync(CancellationToken cancellationToken)
     {
@@ -39,6 +42,11 @@ public class IndexModel : PageModel
         try
         {
             DailyRecommendation = await _insightService.GenerateDailyRecommendationAsync(DateTime.UtcNow, cancellationToken);
+            if (RecommendationParser.TryParseSections(DailyRecommendation, out var sections) && sections is not null)
+            {
+                DailyRecommendationSections = sections;
+                DailyRecommendationHtmlSections = RecommendationParser.ToHtmlSections(sections);
+            }
         }
         catch (InvalidOperationException ex)
         {

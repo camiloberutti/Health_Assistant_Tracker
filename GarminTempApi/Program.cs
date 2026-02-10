@@ -9,6 +9,7 @@ using System.Threading.Tasks;
 using GarminTempApi.Configuration;
 using GarminTempApi.Models;
 using GarminTempApi.Services;
+using GarminTempApi.Utilities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Logging;
@@ -149,6 +150,7 @@ using (var scope = app.Services.CreateScope())
     var connection = db.Database.GetDbConnection();
     EnsureSleepSummaryColumns(connection);
     EnsureRoutineEventColumns(connection);
+    await NormalizeRoutineEventClassificationsAsync(db, scope.ServiceProvider.GetRequiredService<ILoggerFactory>().CreateLogger("RoutineEventNormalization"), CancellationToken.None);
 
     var loggerFactory = scope.ServiceProvider.GetRequiredService<ILoggerFactory>();
     var logger = loggerFactory.CreateLogger("SampleDataSeeder");
@@ -279,6 +281,35 @@ static void EnsureSleepSummaryColumns(DbConnection connection)
     finally
     {
         connection.Close();
+    }
+}
+
+static async Task NormalizeRoutineEventClassificationsAsync(GarminTempApi.Data.AppDbContext db, ILogger logger, CancellationToken cancellationToken)
+{
+    var events = await db.RoutineEvents.ToListAsync(cancellationToken);
+    var updatedFields = 0;
+
+    foreach (var routineEvent in events)
+    {
+        var normalized = RoutineEventCategories.Normalize(routineEvent.Classification);
+        if (!string.Equals(routineEvent.Classification, normalized, StringComparison.Ordinal))
+        {
+            routineEvent.Classification = normalized;
+            updatedFields++;
+        }
+
+        var isRace = RoutineEventCategories.IsRace(normalized);
+        if (routineEvent.IsRace != isRace)
+        {
+            routineEvent.IsRace = isRace;
+            updatedFields++;
+        }
+    }
+
+    if (updatedFields > 0)
+    {
+        await db.SaveChangesAsync(cancellationToken);
+        logger.LogInformation("Normalized {Count} routine event classification fields.", updatedFields);
     }
 }
 

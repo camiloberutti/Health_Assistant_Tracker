@@ -6,7 +6,7 @@ public class RoutineEvent
 {
     public int Id { get; set; }
     public string Title { get; set; } = string.Empty;
-    public string Classification { get; set; } = "Training";
+    public string Classification { get; set; } = "workout cardio";
     public DateTime StartLocal { get; set; }
     public DateTime EndLocal { get; set; }
     public bool IsRace { get; set; }

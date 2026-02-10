@@ -4,7 +4,6 @@
 @using System
 @using System.Globalization
 @using System.Linq
-@using Markdig
 @{
     Layout = "_Layout";
     string FormatDateTime(DateTime? value)
@@ -21,20 +20,6 @@
         var asDateTime = value.Value.ToDateTime(TimeOnly.MinValue, DateTimeKind.Unspecified);
         return asDateTime.ToString("dddd, dd MMM yy", CultureInfo.InvariantCulture);
     }
-
-    string RenderRecommendationHtml(string? recommendation)
-    {
-        if (string.IsNullOrWhiteSpace(recommendation))
-        {
-            return string.Empty;
-        }
-
-        var pipeline = new MarkdownPipelineBuilder()
-            .UseSoftlineBreakAsHardlineBreak()
-            .Build();
-
-        return Markdown.ToHtml(recommendation, pipeline);
-    }
 }
 
 <div class="py-5 text-center">
@@ -49,13 +34,50 @@
                     <i class="bi-stars"></i>
                 </span>
             </div>
-            @{
-                var recommendationHtml = RenderRecommendationHtml(Model.DailyRecommendation);
-            }
-            @if (!string.IsNullOrEmpty(recommendationHtml))
+            @if (Model.DailyRecommendationHtmlSections is not null)
             {
-                <div class="insights-content text-muted">
-                    @Html.Raw(recommendationHtml)
+                var htmlSections = Model.DailyRecommendationHtmlSections;
+                <div class="insights-sections row row-cols-1 row-cols-md-2 g-3">
+                    <div class="col">
+                        <article class="card h-100 border-0 shadow-sm">
+                            <div class="card-body d-flex flex-column gap-2">
+                                <div class="text-uppercase small text-muted fw-semibold">Today Focus</div>
+                                <div class="insights-content text-muted">
+                                    @Html.Raw(htmlSections.TodayInsight)
+                                </div>
+                            </div>
+                        </article>
+                    </div>
+                    <div class="col">
+                        <article class="card h-100 border-0 shadow-sm">
+                            <div class="card-body d-flex flex-column gap-2">
+                                <div class="text-uppercase small text-muted fw-semibold">Next 12 Hours</div>
+                                <div class="insights-content text-muted">
+                                    @Html.Raw(htmlSections.Action12h)
+                                </div>
+                            </div>
+                        </article>
+                    </div>
+                    <div class="col">
+                        <article class="card h-100 border-0 shadow-sm">
+                            <div class="card-body d-flex flex-column gap-2">
+                                <div class="text-uppercase small text-muted fw-semibold">Tomorrow Prep</div>
+                                <div class="insights-content text-muted">
+                                    @Html.Raw(htmlSections.TomorrowPreparation)
+                                </div>
+                            </div>
+                        </article>
+                    </div>
+                    <div class="col">
+                        <article class="card h-100 border-0 shadow-sm">
+                            <div class="card-body d-flex flex-column gap-2">
+                                <div class="text-uppercase small text-muted fw-semibold">Nutrition</div>
+                                <div class="insights-content text-muted">
+                                    @Html.Raw(htmlSections.Nutrition)
+                                </div>
+                            </div>
+                        </article>
+                    </div>
                 </div>
             }
             else if (!string.IsNullOrWhiteSpace(Model.DailyRecommendationError))
@@ -185,6 +207,14 @@ else
 
     .dashboard-card-stats li+li {
         margin-top: 0.35rem;
+    }
+
+    .insights-sections .card {
+        background-color: #f8f9fa;
+    }
+
+    .insights-sections .insights-content p:last-child {
+        margin-bottom: 0;
     }
 
     .accent-steps {

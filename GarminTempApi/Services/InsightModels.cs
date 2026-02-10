@@ -125,3 +125,17 @@ public record CalendarRaceConfiguration(
     int RecoveryWindowDays,
     int LookaheadDays
 );
+
+public record DailyRecommendationSections(
+    string TodayInsight,
+    string Action12h,
+    string TomorrowPreparation,
+    string Nutrition
+);
+
+public record DailyRecommendationHtmlSections(
+    string TodayInsight,
+    string Action12h,
+    string TomorrowPreparation,
+    string Nutrition
+);

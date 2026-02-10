@@ -72,13 +72,19 @@ public class RoutineEventsController : ControllerBase
         }
 
         var now = DateTime.UtcNow;
+        var classification = RoutineEventCategories.Normalize(request.Classification);
+        if (request.IsRace && !RoutineEventCategories.IsRace(classification))
+        {
+            classification = "race";
+        }
+
         var entity = new RoutineEvent
         {
             Title = request.Title.Trim(),
-            Classification = request.Classification,
+            Classification = classification,
             StartLocal = request.StartLocal.AsLocalTime(),
             EndLocal = request.EndLocal.AsLocalTime(),
-            IsRace = request.IsRace,
+            IsRace = RoutineEventCategories.IsRace(classification),
             RaceName = request.RaceName?.Trim(),
             RaceLocation = request.RaceLocation?.Trim(),
             RaceGoal = request.RaceGoal?.Trim(),
@@ -87,7 +93,7 @@ public class RoutineEventsController : ControllerBase
             UpdatedUtc = now
         };
 
-    var recurrenceDays = RoutineEventToolkit.NormalizeDays(request.RecurrenceDays);
+        var recurrenceDays = RoutineEventToolkit.NormalizeDays(request.RecurrenceDays);
         DateOnly? recurrenceStart = null;
         DateOnly? recurrenceEnd = null;
 
@@ -131,7 +137,7 @@ public class RoutineEventsController : ControllerBase
             return BadRequest("Race events require name, location, and goal.");
         }
 
-    entity.IsRecurring = request.RepeatWeekly && recurrenceDays.Count > 0;
+        entity.IsRecurring = request.RepeatWeekly && recurrenceDays.Count > 0;
         if (entity.IsRecurring)
         {
             var startBoundary = recurrenceStart ?? DateOnly.FromDateTime(entity.StartLocal.AsLocalTime());
@@ -188,17 +194,23 @@ public class RoutineEventsController : ControllerBase
         }
 
         entity.Title = request.Title.Trim();
-        entity.Classification = request.Classification;
+        var updatedClassification = RoutineEventCategories.Normalize(request.Classification);
+        if (request.IsRace && !RoutineEventCategories.IsRace(updatedClassification))
+        {
+            updatedClassification = "race";
+        }
+
+        entity.Classification = updatedClassification;
         entity.StartLocal = newStart;
         entity.EndLocal = newEnd;
-        entity.IsRace = request.IsRace;
+        entity.IsRace = RoutineEventCategories.IsRace(updatedClassification);
         entity.RaceName = request.RaceName?.Trim();
         entity.RaceLocation = request.RaceLocation?.Trim();
         entity.RaceGoal = request.RaceGoal?.Trim();
         entity.Notes = request.Notes?.Trim();
         entity.UpdatedUtc = DateTime.UtcNow;
 
-    var updateRecurrenceDays = RoutineEventToolkit.NormalizeDays(request.RecurrenceDays);
+        var updateRecurrenceDays = RoutineEventToolkit.NormalizeDays(request.RecurrenceDays);
         DateOnly? updateRecurrenceStart = null;
         DateOnly? updateRecurrenceEnd = null;
 
@@ -237,7 +249,7 @@ public class RoutineEventsController : ControllerBase
             return BadRequest("Race events require name, location, and goal.");
         }
 
-    entity.IsRecurring = request.RepeatWeekly && updateRecurrenceDays.Count > 0;
+        entity.IsRecurring = request.RepeatWeekly && updateRecurrenceDays.Count > 0;
         if (entity.IsRecurring)
         {
             var startBoundary = updateRecurrenceStart ?? DateOnly.FromDateTime(entity.StartLocal.AsLocalTime());
@@ -281,7 +293,7 @@ public class RoutineEventsController : ControllerBase
 
         [Required]
         [StringLength(100)]
-        public string Classification { get; init; } = "Training";
+        public string Classification { get; init; } = "workout cardio";
 
         [Required]
         public DateTime StartLocal { get; init; }
@@ -336,14 +348,16 @@ public class RoutineEventsController : ControllerBase
             var days = recurrenceDays ?? RoutineEventToolkit.ParseDays(entity.RecurrenceDays);
             var isRecurring = entity.IsRecurring && days.Count > 0;
 
+            var normalizedClassification = RoutineEventCategories.Normalize(entity.Classification);
+
             return new RoutineEventDto
             {
                 Id = entity.Id,
                 Title = entity.Title,
-                Classification = entity.Classification,
+                Classification = normalizedClassification,
                 StartLocal = startLocal.AsLocalTime(),
                 EndLocal = endLocal.AsLocalTime(),
-                IsRace = entity.IsRace,
+                IsRace = RoutineEventCategories.IsRace(normalizedClassification),
                 IsRecurring = isRecurring,
                 RecurrenceDays = isRecurring ? days : Array.Empty<int>(),
                 RecurrenceStartDate = isRecurring ? FormatDate(entity.RecurrenceStartLocal) : null,

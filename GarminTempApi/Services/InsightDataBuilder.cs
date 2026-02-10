@@ -423,13 +423,16 @@ public class InsightDataBuilder
             ? Array.Empty<int>()
             : occurrence.RecurrenceDays.ToArray();
 
+        var classification = RoutineEventCategories.Normalize(entity.Classification);
+        var isRace = RoutineEventCategories.IsRace(classification);
+
         return new RoutineEventSnapshot(
             Id: entity.Id,
             Title: entity.Title,
-            Classification: entity.Classification,
+            Classification: classification,
             StartLocal: occurrence.StartLocal,
             EndLocal: occurrence.EndLocal,
-            IsRace: entity.IsRace,
+            IsRace: isRace,
             IsRecurring: entity.IsRecurring,
             RecurrenceDays: recurrenceDays,
             RecurrenceStartDate: FormatIsoDate(entity.RecurrenceStartLocal),
@@ -442,6 +445,7 @@ public class InsightDataBuilder
 
     private static RaceEventInsight? CreateRaceInsight(RoutineEventToolkit.RoutineEventOccurrence occurrence, DateTime today, CalendarRecommendationOptions options)
     {
+        var classification = RoutineEventCategories.Normalize(occurrence.Event.Classification);
         var eventDate = DateOnly.FromDateTime(occurrence.StartLocal);
         var todayDate = DateOnly.FromDateTime(today);
         var daysOffset = eventDate.DayNumber - todayDate.DayNumber;
@@ -465,7 +469,7 @@ public class InsightDataBuilder
             RaceName: NormalizeText(occurrence.Event.RaceName),
             StartLocal: occurrence.StartLocal,
             EndLocal: occurrence.EndLocal,
-            Classification: occurrence.Event.Classification,
+            Classification: classification,
             Phase: phase,
             DaysOffset: daysOffset,
             RaceLocation: NormalizeText(occurrence.Event.RaceLocation),
