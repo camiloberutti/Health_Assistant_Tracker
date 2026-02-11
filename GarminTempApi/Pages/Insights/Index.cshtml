@@ -4,241 +4,562 @@
     Layout = "_Layout";
 }
 
-<h2>Insights</h2>
+<div class="d-flex flex-column gap-4">
+    <section>
+        <h1 class="h3 mb-1">Insights</h1>
+        <p class="text-secondary mb-0">AI-powered analysis of your training, sleep, and recovery data.</p>
+    </section>
 
-<style>
-    #chatHistory {
-        border: 1px solid #dee2e6;
-        border-radius: 0.75rem;
-        background-color: #f8f9fa;
-        padding: 1rem;
-        max-height: 320px;
-        overflow-y: auto;
-    }
-
-    .chat-message {
-        display: flex;
-        flex-direction: column;
-        margin-bottom: 1rem;
-    }
-
-    .chat-message:last-child {
-        margin-bottom: 0;
-    }
-
-    .chat-message.user {
-        align-items: flex-end;
-    }
-
-    .chat-message.assistant {
-        align-items: flex-start;
-    }
-
-    .chat-message .bubble {
-        padding: 0.75rem 1rem;
-        border-radius: 1rem;
-        max-width: 90%;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
-    }
-
-    .chat-message.user .bubble {
-        background-color: #0d6efd;
-        color: #ffffff;
-    }
-
-    .chat-message.assistant .bubble {
-        background-color: #ffffff;
-        color: #212529;
-        border: 1px solid #dee2e6;
-    }
-
-    .chat-message .timestamp {
-        font-size: 0.75rem;
-        color: #6c757d;
-        margin-top: 0.25rem;
-    }
-</style>
-
-<div class="card mb-4">
-    <div class="card-body">
-        <h5 class="card-title">Daily Recommendation</h5>
-        <p id="dailyRecommendation" class="card-text text-muted">Loading recommendation...</p>
-    </div>
-</div>
-
-<div class="card">
-    <div class="card-body">
-        <h5 class="card-title">Ask About Your Data</h5>
-        <label for="prompt" class="form-label">Question</label>
-        <textarea id="prompt" class="form-control" rows="4"
-            placeholder="How was my training volume last week?"></textarea>
-        <button id="sendBtn" class="btn btn-primary mt-3">Send</button>
-        <div id="chatArea" class="mt-4">
-            <div id="chatHistory" class="chat-history text-muted">No messages yet.</div>
-            <div id="chatStatus" class="text-muted small mt-2">Ready to chat.</div>
+    <!-- Daily Recommendation -->
+    <section class="card shadow-sm border-0" id="recommendation-card">
+        <div class="card-body">
+            <div class="d-flex align-items-center gap-2 mb-3">
+                <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-primary bg-opacity-10 text-primary"
+                      style="width: 2.25rem; height: 2.25rem;">
+                    <i class="bi bi-lightbulb"></i>
+                </span>
+                <h5 class="card-title mb-0">Daily Recommendation</h5>
+            </div>
+            <div id="dailyRecommendation" class="recommendation-content">
+                <div class="d-flex align-items-center gap-2 text-muted">
+                    <div class="spinner-border spinner-border-sm" role="status"></div>
+                    <span>Analyzing your data...</span>
+                </div>
+            </div>
         </div>
-    </div>
+    </section>
+
+    <!-- Chat Section -->
+    <section class="card shadow-sm border-0 chat-card">
+        <div class="card-body p-0 d-flex flex-column" style="height: 560px;">
+            <div class="chat-header px-4 py-3 border-bottom d-flex align-items-center gap-2">
+                <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-success bg-opacity-10 text-success"
+                      style="width: 2.25rem; height: 2.25rem;">
+                    <i class="bi bi-chat-dots"></i>
+                </span>
+                <div>
+                    <h5 class="mb-0 fs-6">Performance Coach</h5>
+                    <small class="text-muted" id="chatStatus">Ask anything about your training data</small>
+                </div>
+            </div>
+
+            <div class="chat-messages flex-grow-1 overflow-auto px-4 py-3" id="chatHistory">
+                <div class="chat-empty-state text-center py-5" id="chatEmptyState">
+                    <i class="bi bi-chat-square-text text-muted" style="font-size: 2.5rem;"></i>
+                    <p class="text-muted mt-2 mb-1">Start a conversation with your AI coach</p>
+                    <div class="d-flex flex-wrap justify-content-center gap-2 mt-3">
+                        <button class="btn btn-outline-secondary btn-sm suggestion-chip" type="button">How am I doing this week?</button>
+                        <button class="btn btn-outline-secondary btn-sm suggestion-chip" type="button">Analyze my sleep quality</button>
+                        <button class="btn btn-outline-secondary btn-sm suggestion-chip" type="button">Should I rest today?</button>
+                        <button class="btn btn-outline-secondary btn-sm suggestion-chip" type="button">Training volume trend</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="chat-input-area border-top px-4 py-3">
+                <form id="event-form" class="d-flex gap-2 align-items-end">
+                    <div class="flex-grow-1 position-relative">
+                        <textarea id="prompt" class="form-control chat-textarea" rows="1"
+                            placeholder="Ask about your training, sleep, recovery..."
+                            style="resize: none; max-height: 120px;"></textarea>
+                    </div>
+                    <button id="sendBtn" class="btn btn-primary d-flex align-items-center justify-content-center"
+                        type="submit" style="width: 42px; height: 42px; border-radius: 50%;" title="Send message">
+                        <i class="bi bi-send" id="sendIcon"></i>
+                        <div class="spinner-border spinner-border-sm d-none" id="sendSpinner" role="status"></div>
+                    </button>
+                </form>
+                <div class="text-muted small mt-1 text-center" style="font-size: 0.72rem;">
+                    Press <kbd>Enter</kbd> to send · <kbd>Shift+Enter</kbd> for new line
+                </div>
+            </div>
+        </div>
+    </section>
 </div>
 
-<script>
-    const dailyEl = document.getElementById('dailyRecommendation');
-    const promptEl = document.getElementById('prompt');
-    const chatHistoryEl = document.getElementById('chatHistory');
-    const statusEl = document.getElementById('chatStatus');
-    const sendBtn = document.getElementById('sendBtn');
+@section Scripts {
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
+    <script>
+    (() => {
+        const dailyEl = document.getElementById('dailyRecommendation');
+        const promptEl = document.getElementById('prompt');
+        const chatHistoryEl = document.getElementById('chatHistory');
+        const chatEmptyState = document.getElementById('chatEmptyState');
+        const statusEl = document.getElementById('chatStatus');
+        const sendBtn = document.getElementById('sendBtn');
+        const sendIcon = document.getElementById('sendIcon');
+        const sendSpinner = document.getElementById('sendSpinner');
+        const form = document.getElementById('event-form');
 
-    const conversation = [];
+        const conversation = [];
+        let isPending = false;
 
-    async function loadDailyRecommendation() {
-        try {
-            const response = await fetch('/api/insights/daily');
-            if (!response.ok) {
-                const error = await response.json().catch(() => ({}));
-                throw new Error(error.error || `HTTP ${response.status}`);
-            }
-
-            const json = await response.json();
-            dailyEl.innerHTML = (json.recommendation || 'No recommendation available.').replace(/\n/g, '<br>');
-        } catch (err) {
-            dailyEl.textContent = `Unable to load recommendation: ${err.message}`;
-        }
-    }
-
-    async function submitPrompt() {
-        if (submitPrompt.pending) {
-            return;
-        }
-
-        const prompt = promptEl.value.trim();
-        if (!prompt) {
-            statusEl.textContent = 'Please enter a question first.';
-            return;
-        }
-
-        submitPrompt.pending = true;
-        sendBtn.disabled = true;
-
-        const userMessage = addMessage('user', prompt);
-        statusEl.textContent = 'Assistant is thinking...';
-        promptEl.value = '';
-
-        try {
-            const response = await fetch('/api/insights/query', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    messages: conversation.map(({ role, content }) => ({ role, content }))
-                })
+        // Configure marked for safe rendering
+        if (typeof marked !== 'undefined') {
+            marked.setOptions({
+                breaks: true,
+                gfm: true
             });
+        }
 
-            if (!response.ok) {
-                const error = await response.json().catch(() => ({}));
-                throw new Error(error.error || `HTTP ${response.status}`);
+        function renderMarkdown(text) {
+            if (!text) return '';
+            if (typeof marked !== 'undefined' && marked.parse) {
+                return marked.parse(text);
             }
+            return escapeHtml(text).replace(/\n/g, '<br>');
+        }
 
-            const json = await response.json();
-            const reply = (json.reply || '').trim();
-            if (reply) {
-                userMessage.pending = false;
-                addMessage('assistant', reply);
-                statusEl.textContent = 'Assistant replied.';
-            } else {
-                removeLastMessageIfPending(userMessage);
-                statusEl.textContent = 'Assistant returned an empty reply.';
+        function escapeHtml(value) {
+            return value.replace(/[&<>"']/g, c => ({ '&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;' })[c]);
+        }
+
+        // Auto-resize textarea
+        promptEl.addEventListener('input', () => {
+            promptEl.style.height = 'auto';
+            promptEl.style.height = Math.min(promptEl.scrollHeight, 120) + 'px';
+        });
+
+        // Enter to send, Shift+Enter for newline
+        promptEl.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter' && !ev.shiftKey) {
+                ev.preventDefault();
+                submitPrompt();
             }
-        } catch (err) {
-            removeLastMessageIfPending(userMessage);
-            promptEl.value = prompt;
-            statusEl.textContent = `Error: ${err.message}`;
-        }
-        submitPrompt.pending = false;
-        sendBtn.disabled = false;
-        promptEl.focus();
-    }
+        });
 
-    submitPrompt.pending = false;
+        // Suggestion chips
+        document.querySelectorAll('.suggestion-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                promptEl.value = chip.textContent;
+                submitPrompt();
+            });
+        });
 
-    function addMessage(role, content) {
-        const entry = {
-            role: role === 'assistant' ? 'assistant' : 'user',
-            content,
-            timestamp: new Date(),
-            pending: role === 'user'
-        };
-        conversation.push(entry);
-        renderConversation();
-        return entry;
-    }
-
-    function removeLastMessageIfPending(entry) {
-        if (!entry || !entry.pending) {
-            return;
-        }
-
-        const index = conversation.indexOf(entry);
-        if (index >= 0) {
-            conversation.splice(index, 1);
-            renderConversation();
-        }
-    }
-
-    function renderConversation() {
-        if (conversation.length === 0) {
-            chatHistoryEl.innerHTML = '<div class="text-muted">No messages yet.</div>';
-            return;
-        }
-
-        const fragments = document.createDocumentFragment();
-        for (const message of conversation) {
-            const wrapper = document.createElement('div');
-            wrapper.className = `chat-message ${message.role}`;
-
-            const bubble = document.createElement('div');
-            bubble.className = 'bubble';
-            bubble.innerHTML = formatContent(message.content);
-            wrapper.appendChild(bubble);
-
-            const meta = document.createElement('div');
-            meta.className = 'timestamp';
-            meta.textContent = `${message.role === 'user' ? 'You' : 'Coach'} • ${formatTimestamp(message.timestamp)}`;
-            wrapper.appendChild(meta);
-            fragments.appendChild(wrapper);
-        }
-
-        chatHistoryEl.innerHTML = '';
-        chatHistoryEl.appendChild(fragments);
-        chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
-    }
-
-    function escapeHtml(value) {
-        return value.replace(/[&<>"']/g, (character) => ({
-            '&': '&amp;',
-            '<': '&lt;',
-            '>': '&gt;',
-            '"': '&quot;',
-            "'": '&#39;'
-        })[character]);
-    }
-
-    function formatContent(value) {
-        return escapeHtml(value).replace(/\n/g, '<br>');
-    }
-
-    function formatTimestamp(date) {
-        if (!(date instanceof Date)) {
-            return '';
-        }
-
-        return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
-    }
-
-    sendBtn.addEventListener('click', submitPrompt);
-
-    promptEl.addEventListener('keydown', (ev) => {
-        if (ev.ctrlKey && ev.key === 'Enter') {
+        form.addEventListener('submit', (ev) => {
+            ev.preventDefault();
             submitPrompt();
-        }
-    });
+        });
 
-    loadDailyRecommendation();
-</script>
+        // ---------- Daily recommendation ----------
+        async function loadDailyRecommendation() {
+            try {
+                const response = await fetch('/api/insights/daily');
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.error || `HTTP ${response.status}`);
+                }
+                const json = await response.json();
+                const raw = (json.recommendation || '').trim();
+                if (!raw) {
+                    dailyEl.innerHTML = '<p class="text-muted mb-0">No recommendation available yet.</p>';
+                    return;
+                }
+
+                // Try to parse JSON structure from GPT
+                let parsed = null;
+                try {
+                    // Strip markdown code fences if present
+                    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+                    parsed = JSON.parse(cleaned);
+                } catch { }
+
+                if (parsed && (parsed.recent_summary || parsed.upcoming_outlook)) {
+                    let html = '<div class="row g-3">';
+                    if (parsed.recent_summary) {
+                        html += `
+                            <div class="col-md-6">
+                                <div class="d-flex align-items-start gap-2">
+                                    <i class="bi bi-clock-history text-primary mt-1"></i>
+                                    <div>
+                                        <div class="fw-semibold small text-uppercase text-muted mb-1">Recent Summary</div>
+                                        <div class="recommendation-text">${renderMarkdown(parsed.recent_summary)}</div>
+                                    </div>
+                                </div>
+                            </div>`;
+                    }
+                    if (parsed.upcoming_outlook) {
+                        html += `
+                            <div class="col-md-6">
+                                <div class="d-flex align-items-start gap-2">
+                                    <i class="bi bi-arrow-right-circle text-success mt-1"></i>
+                                    <div>
+                                        <div class="fw-semibold small text-uppercase text-muted mb-1">Upcoming Outlook</div>
+                                        <div class="recommendation-text">${renderMarkdown(parsed.upcoming_outlook)}</div>
+                                    </div>
+                                </div>
+                            </div>`;
+                    }
+                    html += '</div>';
+                    dailyEl.innerHTML = html;
+                } else {
+                    // Fallback: render as markdown
+                    dailyEl.innerHTML = `<div class="recommendation-text">${renderMarkdown(raw)}</div>`;
+                }
+            } catch (err) {
+                dailyEl.innerHTML = `<div class="d-flex align-items-center gap-2 text-danger">
+                    <i class="bi bi-exclamation-triangle"></i>
+                    <span>Unable to load recommendation: ${escapeHtml(err.message)}</span>
+                </div>`;
+            }
+        }
+
+        // ---------- Chat ----------
+        function setLoading(loading) {
+            isPending = loading;
+            sendBtn.disabled = loading;
+            sendIcon.classList.toggle('d-none', loading);
+            sendSpinner.classList.toggle('d-none', !loading);
+            statusEl.textContent = loading ? 'Coach is thinking...' : 'Ask anything about your training data';
+        }
+
+        async function submitPrompt() {
+            if (isPending) return;
+
+            const prompt = promptEl.value.trim();
+            if (!prompt) return;
+
+            setLoading(true);
+            promptEl.value = '';
+            promptEl.style.height = 'auto';
+
+            const userEntry = addMessage('user', prompt);
+
+            try {
+                const response = await fetch('/api/insights/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        messages: conversation.map(({ role, content }) => ({ role, content }))
+                    })
+                });
+
+                if (!response.ok) {
+                    const error = await response.json().catch(() => ({}));
+                    throw new Error(error.error || `HTTP ${response.status}`);
+                }
+
+                const json = await response.json();
+                const reply = (json.reply || '').trim();
+                if (reply) {
+                    userEntry.pending = false;
+                    addMessage('assistant', reply);
+                } else {
+                    removeEntry(userEntry);
+                    showToast('Coach returned an empty reply.');
+                }
+            } catch (err) {
+                removeEntry(userEntry);
+                promptEl.value = prompt;
+                showToast(`Error: ${err.message}`);
+            }
+
+            setLoading(false);
+            promptEl.focus();
+        }
+
+        function addMessage(role, content) {
+            const entry = {
+                role: role === 'assistant' ? 'assistant' : 'user',
+                content,
+                timestamp: new Date(),
+                pending: role === 'user'
+            };
+            conversation.push(entry);
+            renderConversation();
+            return entry;
+        }
+
+        function removeEntry(entry) {
+            const idx = conversation.indexOf(entry);
+            if (idx >= 0) {
+                conversation.splice(idx, 1);
+                renderConversation();
+            }
+        }
+
+        function renderConversation() {
+            if (chatEmptyState) {
+                chatEmptyState.style.display = conversation.length === 0 ? 'block' : 'none';
+            }
+
+            // Remove old messages but keep empty state
+            chatHistoryEl.querySelectorAll('.chat-message, .typing-indicator').forEach(el => el.remove());
+
+            for (const message of conversation) {
+                const wrapper = document.createElement('div');
+                wrapper.className = `chat-message ${message.role}`;
+
+                const avatar = document.createElement('div');
+                avatar.className = 'chat-avatar';
+                avatar.innerHTML = message.role === 'user'
+                    ? '<i class="bi bi-person-fill"></i>'
+                    : '<i class="bi bi-robot"></i>';
+
+                const bubble = document.createElement('div');
+                bubble.className = 'bubble';
+
+                if (message.role === 'assistant') {
+                    bubble.innerHTML = renderMarkdown(message.content);
+                } else {
+                    bubble.textContent = message.content;
+                }
+
+                const meta = document.createElement('div');
+                meta.className = 'chat-meta';
+                meta.textContent = formatTimestamp(message.timestamp);
+
+                wrapper.appendChild(avatar);
+                const contentWrap = document.createElement('div');
+                contentWrap.className = 'chat-content';
+                contentWrap.appendChild(bubble);
+                contentWrap.appendChild(meta);
+                wrapper.appendChild(contentWrap);
+
+                chatHistoryEl.appendChild(wrapper);
+            }
+
+            // Add typing indicator if pending
+            if (isPending) {
+                const typing = document.createElement('div');
+                typing.className = 'chat-message assistant typing-indicator';
+                typing.innerHTML = `
+                    <div class="chat-avatar"><i class="bi bi-robot"></i></div>
+                    <div class="chat-content">
+                        <div class="bubble">
+                            <div class="typing-dots">
+                                <span></span><span></span><span></span>
+                            </div>
+                        </div>
+                    </div>`;
+                chatHistoryEl.appendChild(typing);
+            }
+
+            chatHistoryEl.scrollTop = chatHistoryEl.scrollHeight;
+        }
+
+        function formatTimestamp(date) {
+            if (!(date instanceof Date)) return '';
+            return date.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' });
+        }
+
+        function showToast(message) {
+            statusEl.textContent = message;
+            setTimeout(() => {
+                if (!isPending) statusEl.textContent = 'Ask anything about your training data';
+            }, 5000);
+        }
+
+        loadDailyRecommendation();
+    })();
+    </script>
+    <style>
+        /* Recommendation section */
+        .recommendation-content p {
+            margin-bottom: 0.5rem;
+        }
+        .recommendation-content p:last-child {
+            margin-bottom: 0;
+        }
+        .recommendation-text {
+            font-size: 0.95rem;
+            line-height: 1.6;
+        }
+        .recommendation-text strong {
+            color: var(--bs-primary);
+        }
+
+        /* Chat section */
+        .chat-card {
+            overflow: hidden;
+        }
+
+        .chat-messages {
+            background: #f8f9fd;
+        }
+
+        .chat-empty-state {
+            color: #6c757d;
+        }
+
+        .suggestion-chip {
+            border-radius: 2rem;
+            font-size: 0.82rem;
+            padding: 0.35rem 0.85rem;
+            transition: all 0.15s ease;
+        }
+        .suggestion-chip:hover {
+            background: var(--bs-primary);
+            color: #fff;
+            border-color: var(--bs-primary);
+        }
+
+        /* Chat messages */
+        .chat-message {
+            display: flex;
+            gap: 0.6rem;
+            margin-bottom: 1rem;
+            max-width: 85%;
+        }
+        .chat-message:last-child {
+            margin-bottom: 0;
+        }
+        .chat-message.user {
+            flex-direction: row-reverse;
+            margin-left: auto;
+        }
+        .chat-message.assistant {
+            margin-right: auto;
+        }
+
+        .chat-avatar {
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            flex-shrink: 0;
+            font-size: 0.9rem;
+        }
+        .chat-message.user .chat-avatar {
+            background: var(--bs-primary);
+            color: #fff;
+        }
+        .chat-message.assistant .chat-avatar {
+            background: #e9ecef;
+            color: #495057;
+        }
+
+        .chat-content {
+            display: flex;
+            flex-direction: column;
+        }
+        .chat-message.user .chat-content {
+            align-items: flex-end;
+        }
+
+        .chat-message .bubble {
+            padding: 0.7rem 1rem;
+            border-radius: 1.1rem;
+            font-size: 0.92rem;
+            line-height: 1.55;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.06);
+            word-wrap: break-word;
+            overflow-wrap: break-word;
+       }
+
+        .chat-message.user .bubble {
+            background: var(--bs-primary);
+            color: #fff;
+            border-bottom-right-radius: 0.3rem;
+        }
+
+        .chat-message.assistant .bubble {
+            background: #fff;
+            color: #212529;
+            border: 1px solid #e9ecef;
+            border-bottom-left-radius: 0.3rem;
+        }
+
+        /* Markdown inside assistant bubbles */
+        .chat-message.assistant .bubble p {
+            margin-bottom: 0.4rem;
+        }
+        .chat-message.assistant .bubble p:last-child {
+            margin-bottom: 0;
+        }
+        .chat-message.assistant .bubble ul,
+        .chat-message.assistant .bubble ol {
+            margin-bottom: 0.4rem;
+            padding-left: 1.3rem;
+        }
+        .chat-message.assistant .bubble li {
+            margin-bottom: 0.2rem;
+        }
+        .chat-message.assistant .bubble strong {
+            color: var(--bs-primary);
+        }
+        .chat-message.assistant .bubble h1,
+        .chat-message.assistant .bubble h2,
+        .chat-message.assistant .bubble h3,
+        .chat-message.assistant .bubble h4 {
+            font-size: 0.95rem;
+            font-weight: 700;
+            margin-top: 0.6rem;
+            margin-bottom: 0.3rem;
+        }
+        .chat-message.assistant .bubble h1:first-child,
+        .chat-message.assistant .bubble h2:first-child,
+        .chat-message.assistant .bubble h3:first-child,
+        .chat-message.assistant .bubble h4:first-child {
+            margin-top: 0;
+        }
+        .chat-message.assistant .bubble code {
+            font-size: 0.85em;
+            background: #f1f3f5;
+            padding: 0.1rem 0.35rem;
+            border-radius: 0.3rem;
+        }
+        .chat-message.assistant .bubble pre {
+            background: #f1f3f5;
+            padding: 0.6rem 0.8rem;
+            border-radius: 0.5rem;
+            overflow-x: auto;
+            font-size: 0.83rem;
+        }
+
+        .chat-meta {
+            font-size: 0.7rem;
+            color: #adb5bd;
+            margin-top: 0.2rem;
+            padding: 0 0.3rem;
+        }
+
+        /* Typing indicator */
+        .typing-dots {
+            display: flex;
+            gap: 4px;
+            padding: 0.2rem 0;
+        }
+        .typing-dots span {
+            width: 7px;
+            height: 7px;
+            border-radius: 50%;
+            background: #adb5bd;
+            animation: typing-bounce 1.4s ease-in-out infinite;
+        }
+        .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+        @@keyframes typing-bounce {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+            30% { transform: translateY(-6px); opacity: 1; }
+        }
+
+        /* Chat input */
+        .chat-textarea {
+            border-radius: 1.2rem;
+            padding: 0.6rem 1rem;
+            border: 1px solid #dee2e6;
+            transition: border-color 0.15s ease, box-shadow 0.15s ease;
+        }
+        .chat-textarea:focus {
+            border-color: var(--bs-primary);
+            box-shadow: 0 0 0 0.2rem rgba(13, 110, 253, 0.15);
+        }
+
+        #sendBtn {
+            flex-shrink: 0;
+        }
+
+        kbd {
+            background: #eee;
+            border: 1px solid #ddd;
+            border-radius: 3px;
+            padding: 1px 4px;
+            font-size: 0.75rem;
+            color: #555;
+        }
+    </style>
+}
