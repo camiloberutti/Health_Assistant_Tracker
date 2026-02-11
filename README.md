@@ -1,172 +1,98 @@
 # App_Garmin
 
-Small ASP.NET 9.0 Web API + Razor UI for reading Garmin activity data via the [garminconnect](https://github.com/cyberjunky/python-garminconnect) Python library.
+A comprehensive personal health dashboard built with **ASP.NET Core 9.0**, **AI-driven insights**, and a lot of **vibecoding**. This application aggregates data from your **Garmin** devices (via Garmin Connect), visualizes your performance, and uses OpenAI to provide daily coaching recommendations.
 
-This repository contains:
-- `GarminTempApi/` — ASP.NET Web API + Razor Pages project (targets .NET 9.0)
-- `web/Dockerfile` — multi-stage Dockerfile for building and running the API
-- `docker-compose.yml` — spins up the API container (no extra services required)
+> **Note**: Currently, this project supports **Garmin devices only**.
 
----
+## 🎯 Project Vision
 
-## Prerequisites
+The core goal of this project is to evolve the **Recommendation Agents** into a truly intelligent coaching system. We aim to move beyond simple summaries and create an agent that:
+1.  **Gives better recommendations**: Deeper context awareness, less generic advice, and "smarter" coaching.
+2.  **Incorporates Routines**: Seamlessly suggests and adds workouts to your routine calendar based on your recovery and goals.
 
-| Requirement             | Notes                                              |
-| ----------------------- | -------------------------------------------------- |
-| .NET SDK 9.0+           | Build & run the API                                |
-| Python 3.10+ with `pip` | Used by the `garminconnect` helper script          |
-| Docker (optional)       | Recommended for the self-contained container image |
-| Git                     | Version control                                    |
+##  Documentation
 
-## Configuration
-
-**All secrets and credentials are managed through environment variables.**  
-No API keys, passwords, or personal data should ever be committed to the repository.
-
-### 1. Create your `.env` file
-
-Copy the provided template and fill in your values:
-
-```powershell
-cp .env.example .env
-```
-
-Then edit `.env` with your credentials:
-
-```dotenv
-# Required — Garmin Connect credentials
-GARMIN_USERNAME=your-garmin-email@example.com
-GARMIN_PASSWORD=your-garmin-password
-
-# Optional — date range and limits
-GARMIN_START_DATE=2025-01-01
-GARMIN_END_DATE=2025-12-31
-GARMIN_MAX_ACTIVITIES=50
-GARMIN_REFRESH_MINUTES=60
-
-# Optional — enables AI-powered Insights page
-CHATGPT_API_KEY=sk-...your-openai-api-key...
-```
-
-> **The `.env` file is git-ignored and will never be committed.**
-
-### 2. Environment variables reference
-
-| Variable                 | Required | Description                                              |
-| ------------------------ | -------- | -------------------------------------------------------- |
-| `GARMIN_USERNAME`        | Yes      | Your Garmin Connect e-mail                               |
-| `GARMIN_PASSWORD`        | Yes      | Your Garmin Connect password                             |
-| `GARMIN_START_DATE`      | No       | Start date for activity import (`YYYY-MM-DD`)            |
-| `GARMIN_END_DATE`        | No       | End date for activity import (`YYYY-MM-DD`)              |
-| `GARMIN_MAX_ACTIVITIES`  | No       | Maximum number of activities to fetch per sync           |
-| `GARMIN_REFRESH_MINUTES` | No       | Interval (minutes) between automatic sync runs           |
-| `CHATGPT_API_KEY`        | No       | OpenAI API key for AI insights                           |
-| `APP_DATA_DIR`           | No       | Directory for the SQLite database (defaults to `./data`) |
-
-### 3. Local development settings
-
-For local development, copy the template:
-
-```powershell
-cp GarminTempApi/appsettings.Development.json.template GarminTempApi/appsettings.Development.json
-```
-
-Edit the `PythonExecutable` path if your Python installation is not on `PATH`.  
-This file is git-ignored so machine-specific paths stay out of the repo.
+*   **[User Guide](docs/USER_GUIDE.md)**: Walkthrough of the dashboard features.
+*   **[Architecture](docs/ARCHITECTURE.md)**: Technical deep-dive into the stack, data flow, and components.
+*   **[Contributing & Roadmap](docs/CONTRIBUTING.md)**: How to help out and future ideas.
 
 ---
 
-## Quickstart — build and run locally
+##  How to Run
 
-```powershell
-# 1. Install the Python dependency
-pip install garminconnect
+You can run this project using **Docker** (recommended) or locally with **.NET**.
 
-# 2. Create your .env (see Configuration above)
-cp .env.example .env
-# ... edit .env with your credentials ...
+### Prerequisites
+*   **Garmin Connect Account**: Email and password.
+*   **OpenAI API Key** (Optional): For AI coaching features.
 
-# 3. Build
-dotnet build App_Garmin.sln -c Debug
+### Option A: Docker Compose (Recommended)
 
-# 4. Run the API + Razor UI
-cd GarminTempApi
-dotnet run -c Debug
+This is the easiest way to get started. It builds the container (including .NET and Python dependencies) and starts the server.
 
-# 5. Trigger an initial Garmin import (creates the DB on first run)
-Invoke-RestMethod -Method Post http://localhost:5180/api/admin/trigger-import
+1.  **Clone the repository**:
+    \\\ash
+    git clone https://github.com/yourusername/App_Garmin.git
+    cd App_Garmin
+    \\\
 
-# 6. Inspect activities
-Invoke-RestMethod http://localhost:5180/api/garmindb/activities?limit=10 | Format-Table
-```
+2.  **Configure Environment**:
+    Copy the example file and edit it with your credentials.
+    \\\powershell
+    cp .env.example .env
+    # Edit .env with your GARMIN_USERNAME, GARMIN_PASSWORD, etc.
+    \\\
 
-> The host/port may differ — check the `dotnet run` output for `Now listening on:` and adjust accordingly.
+3.  **Run**:
+    \\\powershell
+    docker-compose up -d
+    \\\
+    The app will be available at **http://localhost:5180**.
 
-- **Razor UI** is available at `http://localhost:5180/` (Activities / Sleep / Steps / Insights pages).
-- The importer stores data in a local SQLite database (`garmin_app.db`) inside the directory set by `APP_DATA_DIR` (defaults to `./data`).
+4.  **Update/Rebuild**:
+    If you make code changes, run:
+    \\\powershell
+    ./apply-changes.ps1
+    \\\
 
-## Run with Docker
+### Option B: Local Development (.NET CLI)
 
-```powershell
-# 1. Create your .env file (see Configuration above)
-cp .env.example .env
+1.  **Install Dependencies**:
+    *   [.NET 9.0 SDK](https://dotnet.microsoft.com/download/dotnet/9.0)
+    *   [Python 3.10+](https://www.python.org/downloads/) (Make sure 'python' is in your PATH)
+    *   Install the Garmin library:
+        \\\ash
+        pip install garminconnect
+        \\\
 
-# 2. Build and start the container (includes Python + garminconnect)
-docker-compose up -d --build
+2.  **Configure**:
+    Ensure your \.env\ file is created (see step 2 in Option A). The app reads this file on startup.
 
-# 3. Trigger an import
-Invoke-RestMethod -Method Post http://localhost:5000/api/admin/trigger-import
-
-# 4. Follow logs
-docker-compose logs -f web
-
-# 5. Open the UI
-Start-Process http://localhost:5000/
-```
-
-- The container stores SQLite data under `/app/data` (persisted in the `garmin-data` Docker volume).
-- All environment variables from your `.env` file are forwarded automatically by `docker-compose`.
-
----
-
-## CI
-
-A GitHub Actions workflow is included at `.github/workflows/dotnet.yml` that restores and builds the solution on push and pull requests.
-
----
-
-## Third-party libraries and licenses
-
-This project depends on the following open-source libraries:
-
-### Python
-
-| Library                                                  | License | Repository                                                                            |
-| -------------------------------------------------------- | ------- | ------------------------------------------------------------------------------------- |
-| [garminconnect](https://pypi.org/project/garminconnect/) | MIT     | [cyberjunky/python-garminconnect](https://github.com/cyberjunky/python-garminconnect) |
-
-### .NET (NuGet)
-
-| Package                                                                                                     | License      | Repository                                                |
-| ----------------------------------------------------------------------------------------------------------- | ------------ | --------------------------------------------------------- |
-| [Microsoft.AspNetCore.OpenApi](https://www.nuget.org/packages/Microsoft.AspNetCore.OpenApi)                 | MIT          | [dotnet/aspnetcore](https://github.com/dotnet/aspnetcore) |
-| [Microsoft.EntityFrameworkCore](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore)               | MIT          | [dotnet/efcore](https://github.com/dotnet/efcore)         |
-| [Microsoft.EntityFrameworkCore.Sqlite](https://www.nuget.org/packages/Microsoft.EntityFrameworkCore.Sqlite) | MIT          | [dotnet/efcore](https://github.com/dotnet/efcore)         |
-| [Markdig](https://www.nuget.org/packages/Markdig)                                                           | BSD-2-Clause | [xoofx/markdig](https://github.com/xoofx/markdig)         |
-
-### Disclaimer
-
-This project is **not affiliated with, endorsed by, or connected to Garmin Ltd.** in any way.  
-"Garmin" and "Garmin Connect" are registered trademarks of Garmin Ltd. or its subsidiaries.  
-This application accesses Garmin Connect data through the unofficial [`garminconnect`](https://github.com/cyberjunky/python-garminconnect) Python library, which uses a reverse-engineered API. **Use at your own risk** — Garmin may change or restrict access to this API at any time.
-
-## License
-
-This repository is released under the **MIT License** — see the [LICENSE](LICENSE) file for details.
+3.  **Run**:
+    \\\powershell
+    cd GarminTempApi
+    dotnet watch run
+    \\\
 
 ---
 
-## User Guide
+##  Configuration (.env)
 
-Check out the [User Guide](docs/USER_GUIDE.md) for screenshots and a feature walkthrough.
+| Variable                 | Description                                           | Default |
+| ------------------------ | ----------------------------------------------------- | ------- |
+| \GARMIN_USERNAME\        | Your Garmin Connect login email (Required)            | -       |
+| \GARMIN_PASSWORD\        | Your Garmin Connect password (Required)               | -       |
+| \GARMIN_REFRESH_MINUTES\ | Activity sync interval (minutes)                      | \60\    |
+| \GARMIN_START_DATE\      | Start of history import (YYYY-MM-DD)                  | -       |
+| \GARMIN_END_DATE\        | End date (Leave empty to always sync up to **today**) | -       |
+| \CHATGPT_API_KEY\        | OpenAI Key for insights (Optional)                    | -       |
+
+---
+
+##  Contributing
+
+We want to make this the best self-hosted Garmin dashboard available. Check out the **[Contributing Guide](docs/CONTRIBUTING.md)** for:
+*   Step-by-step development instructions.
+*   List of planned features (Mobile support, Dark mode, etc.).
+*   Architecture details.
 
