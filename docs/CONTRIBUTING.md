@@ -1,6 +1,6 @@
 # Contributing & Future Improvements
 
-We welcome contributions to improve the **App_Garmin** project! Whether you want to fix a bug, improve the documentation, or add a shiny new feature, this guide will help you get started.
+We welcome contributions to improve the **Health_Assistant_Tracker** project! Whether you want to fix a bug, improve the documentation, or add a shiny new feature, this guide will help you get started.
 
 ## How to Contribute
 

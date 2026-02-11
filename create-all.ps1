@@ -16,8 +16,8 @@ Write-Host "Creating ASP.NET Core WebAPI project..."
 dotnet new webapi -n GarminTempApi | Out-Null
 
 # create solution and add project
-dotnet new sln -n App_Garmin | Out-Null
-dotnet sln App_Garmin.sln add .\GarminTempApi\GarminTempApi.csproj | Out-Null
+dotnet new sln -n Health_Assistant_Tracker | Out-Null
+dotnet sln Health_Assistant_Tracker.sln add .\GarminTempApi\GarminTempApi.csproj | Out-Null
 
 # create folders for our code
 $folders = @(
@@ -745,7 +745,7 @@ done
 '@
 Set-Content -Path ".\garmindb\run_garmindb.sh" -Value $runScript -Encoding UTF8
 # convert line endings to LF
-(Get-Content .\garmindb\run_garmindb.sh -Raw) -replace "`r`n","`n" | Set-Content .\garmindb\run_garmindb.sh -Encoding UTF8
+(Get-Content .\garmindb\run_garmindb.sh -Raw) -replace "`r`n", "`n" | Set-Content .\garmindb\run_garmindb.sh -Encoding UTF8
 
 # 19) web/Dockerfile (builds the ASP.NET app)
 $webdocker = @'

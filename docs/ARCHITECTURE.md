@@ -1,6 +1,6 @@
 # System Architecture
 
-This document describes the technical architecture of the **App_Garmin** project.
+This document describes the technical architecture of the **Health_Assistant_Tracker** project.
 
 ## High-Level Overview
 

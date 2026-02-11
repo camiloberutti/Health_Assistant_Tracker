@@ -1,4 +1,4 @@
-# App_Garmin
+# Health_Assistant_Tracker
 
 A comprehensive personal health dashboard built with **ASP.NET Core 9.0**, **AI-driven insights**, and a lot of **vibecoding**. This application aggregates data from your **Garmin** devices (via Garmin Connect), visualizes your performance, and uses OpenAI to provide daily coaching recommendations.
 
@@ -32,8 +32,8 @@ This is the easiest way to get started. It builds the container (including .NET 
 
 1.  **Clone the repository**:
     \\\ash
-    git clone https://github.com/yourusername/App_Garmin.git
-    cd App_Garmin
+    git clone https://github.com/camiloberutti/Health_Assistant_Tracker.git
+    cd Health_Assistant_Tracker
     \\\
 
 2.  **Configure Environment**:

@@ -28,10 +28,10 @@ jobs:
             nuget-${{ runner.os }}-
 
       - name: Restore
-        run: dotnet restore App_Garmin.sln
+        run: dotnet restore Health_Assistant_Tracker.sln
 
       - name: Build
-        run: dotnet build App_Garmin.sln --no-restore --configuration Release
+        run: dotnet build Health_Assistant_Tracker.sln --no-restore --configuration Release
 
       - name: Publish API (sanity)
         run: dotnet publish GarminTempApi/GarminTempApi.csproj -c Release -o publish
