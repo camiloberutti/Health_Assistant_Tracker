@@ -13,7 +13,7 @@
         <div class="d-flex gap-2">
             <button class="btn btn-outline-secondary" type="button" id="previous-week">Previous</button>
             <button class="btn btn-outline-secondary" type="button" id="next-week">Next</button>
-            <button class="btn btn-primary" type="button" data-bs-toggle="modal" data-bs-target="#eventModal">Add
+            <button class="btn btn-primary" type="button" id="add-event-button">Add
                 event</button>
         </div>
     </section>
@@ -264,6 +264,28 @@
                 return `${hours}:${minutes}`;
             }
 
+            function formatLocalIso(date) {
+                if (typeof date === 'string') return date;
+                const year = date.getFullYear();
+                const month = String(date.getMonth() + 1).padStart(2, '0');
+                const day = String(date.getDate()).padStart(2, '0');
+                const hours = String(date.getHours()).padStart(2, '0');
+                const minutes = String(date.getMinutes()).padStart(2, '0');
+                const seconds = String(date.getSeconds()).padStart(2, '0');
+                return `${year}-${month}-${day}T${hours}:${minutes}:${seconds}`;
+            }
+
+            function roundToNextHalfHour() {
+                const now = new Date();
+                const minutes = now.getMinutes();
+                if (minutes <= 30) {
+                    now.setMinutes(30, 0, 0);
+                } else {
+                    now.setHours(now.getHours() + 1, 0, 0, 0);
+                }
+                return now;
+            }
+
             function classificationToCss(classification) {
                 if (!classification) {
                     return 'unknown';
@@ -301,6 +323,12 @@
                 const body = column.querySelector('[data-dropzone]');
                 body.dataset.date = column.dataset.date;
 
+                body.addEventListener('click', (evt) => {
+                    if (evt.target === body || evt.target.closest('[data-dropzone]') === body && !evt.target.closest('.calendar-event')) {
+                        openModal(null, column.dataset.date);
+                    }
+                });
+
                 body.addEventListener('dragover', evt => {
                     evt.preventDefault();
                     body.classList.add('drag-over');
@@ -324,7 +352,7 @@
                     const duration = end.getTime() - start.getTime();
                     const updatedStart = new Date(year, month - 1, day, hours, minutes);
                     const updatedEnd = new Date(updatedStart.getTime() + duration);
-                    await saveEvent({ ...event, startLocal: updatedStart, endLocal: updatedEnd });
+                    await saveEvent({ ...event, startLocal: formatLocalIso(updatedStart), endLocal: formatLocalIso(updatedEnd) });
                     await loadEvents();
                 });
 
@@ -564,7 +592,7 @@
 
                 const body = JSON.stringify(payload, (key, value) => {
                     if (value instanceof Date) {
-                        return value.toISOString();
+                        return formatLocalIso(value);
                     }
                     return value;
                 });
@@ -592,7 +620,7 @@
                 }
             }
 
-            function openModal(event) {
+            function openModal(event, prefilledDate) {
                 const editing = Boolean(event);
                 document.getElementById('eventModalLabel').textContent = editing ? 'Edit event' : 'Add event';
                 deleteButton.style.display = editing ? 'inline-flex' : 'none';
@@ -600,17 +628,19 @@
                 form.reset();
 
                 const now = new Date();
-                const defaultDate = editing ? new Date(event.startLocal) : now;
-                const defaultStart = editing ? new Date(event.startLocal) : now;
-                const defaultEnd = editing ? new Date(event.endLocal) : new Date(now.getTime() + 60 * 60 * 1000);
+                const roundedStart = roundToNextHalfHour();
+                const roundedEnd = new Date(roundedStart.getTime() + 60 * 60 * 1000);
+                const defaultDate = editing ? new Date(event.startLocal) : (prefilledDate ? new Date(`${prefilledDate}T00:00:00`) : now);
+                const defaultStart = editing ? new Date(event.startLocal) : roundedStart;
+                const defaultEnd = editing ? new Date(event.endLocal) : roundedEnd;
 
                 document.getElementById('event-id').value = editing ? event.id : '';
                 document.getElementById('event-title').value = editing ? event.title : '';
                 setClassificationSelectValue(editing ? event.classification : 'workout cardio');
                 classificationSelect.dispatchEvent(new Event('change'));
-                eventDateInput.value = formatIsoDate(defaultDate);
-                eventStartInput.value = editing ? formatTimeForInput(defaultStart) : '08:00';
-                eventEndInput.value = editing ? formatTimeForInput(defaultEnd) : '09:00';
+                eventDateInput.value = prefilledDate || formatIsoDate(defaultDate);
+                eventStartInput.value = editing ? formatTimeForInput(defaultStart) : formatTimeForInput(roundedStart);
+                eventEndInput.value = editing ? formatTimeForInput(defaultEnd) : formatTimeForInput(roundedEnd);
                 document.getElementById('race-name').value = editing && event.raceName ? event.raceName : '';
                 document.getElementById('race-location').value = editing && event.raceLocation ? event.raceLocation : '';
                 document.getElementById('race-goal').value = editing && event.raceGoal ? event.raceGoal : '';
@@ -653,9 +683,17 @@
                     return;
                 }
 
-                const startDate = new Date(`${date}T${start}`);
-                const endDate = new Date(`${date}T${end}`);
+                const startLocal = `${date}T${start}:00`;
+                const endLocal = `${date}T${end}:00`;
 
+                if (endLocal >= startLocal === false) {
+                    alert('End time must be after start time.');
+                    return;
+                }
+
+                // Also validate with Date objects for edge cases
+                const startDate = new Date(startLocal);
+                const endDate = new Date(endLocal);
                 if (endDate <= startDate) {
                     alert('End time must be after start time.');
                     return;
@@ -687,8 +725,8 @@
                     id: id ? Number(id) : undefined,
                     title,
                     classification,
-                    startLocal: startDate,
-                    endLocal: endDate,
+                    startLocal: startLocal,
+                    endLocal: endLocal,
                     raceName: document.getElementById('race-name').value.trim() || null,
                     raceLocation: document.getElementById('race-location').value.trim() || null,
                     raceGoal: document.getElementById('race-goal').value.trim() || null,
@@ -761,6 +799,10 @@
                 }
             });
 
+            document.getElementById('add-event-button').addEventListener('click', () => {
+                openModal();
+            });
+
             modalElement.addEventListener('hidden.bs.modal', () => {
                 form.reset();
                 classificationSelect.dispatchEvent(new Event('change'));
@@ -814,6 +856,8 @@
             display: flex;
             flex-direction: column;
             gap: 0.75rem;
+            cursor: pointer;
+            min-height: 120px;
         }
 
         .calendar-column-body.drag-over {
