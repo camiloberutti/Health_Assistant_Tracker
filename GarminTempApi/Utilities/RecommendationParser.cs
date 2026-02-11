@@ -33,6 +33,7 @@ internal static class RecommendationParser
 
             var recent_summary = ReadString("recent_summary");
             var upcoming_outlook = ReadString("upcoming_outlook");
+            var suggested_workout = ReadString("suggested_workout");
 
             if (string.IsNullOrWhiteSpace(recent_summary) ||
                 string.IsNullOrWhiteSpace(upcoming_outlook))
@@ -40,7 +41,7 @@ internal static class RecommendationParser
                 return false;
             }
 
-            sections = new DailyRecommendationSections(recent_summary!, upcoming_outlook!);
+            sections = new DailyRecommendationSections(recent_summary!, upcoming_outlook!, suggested_workout);
             return true;
         }
         catch (JsonException)
@@ -53,7 +54,8 @@ internal static class RecommendationParser
     {
         return new DailyRecommendationHtmlSections(
             MarkdownRenderer.ToHtml(sections.RecentSummary),
-            MarkdownRenderer.ToHtml(sections.UpcomingOutlook));
+            MarkdownRenderer.ToHtml(sections.UpcomingOutlook),
+            string.IsNullOrWhiteSpace(sections.SuggestedWorkout) ? null : MarkdownRenderer.ToHtml(sections.SuggestedWorkout));
     }
 
     public static string CombineHtml(DailyRecommendationHtmlSections htmlSections)

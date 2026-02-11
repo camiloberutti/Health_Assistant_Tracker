@@ -119,7 +119,7 @@
             }
 
             .app-content {
-                max-width: 1100px;
+                max-width: 1440px;
                 margin-left: auto;
                 margin-right: auto;
             }
@@ -224,12 +224,6 @@
                             <span>My Routine</span>
                         </a>
                     </li>
-                    <li class="nav-item">
-                        <a class="nav-link @(IsActive("/Insights") ? "active" : null)" href="/Insights">
-                            <i class="bi bi-lightbulb"></i>
-                            <span>Insights</span>
-                        </a>
-                    </li>
                 </ul>
             </nav>
 
@@ -258,35 +252,409 @@
         </div>
     </div>
 
+    <!-- Floating Chat Widget -->
+    <div id="chatWidget" class="chat-widget">
+        <div class="chat-widget-panel d-none" id="chatPanel">
+            <div class="chat-widget-header d-flex align-items-center gap-2 px-3 py-2">
+                <span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-white bg-opacity-25"
+                      style="width: 2rem; height: 2rem;">
+                    <i class="bi bi-robot text-white"></i>
+                </span>
+                <div class="flex-grow-1">
+                    <div class="fw-semibold text-white" style="font-size: 0.9rem;">Performance Coach</div>
+                    <div class="text-white-50" style="font-size: 0.7rem;" id="chatWidgetStatus">Ask anything about your data</div>
+                </div>
+                <button class="btn btn-sm btn-link text-white-50 p-0 me-1" id="chatWidgetNewBtn" title="New conversation">
+                    <i class="bi bi-plus-circle" style="font-size: 1rem;"></i>
+                </button>
+                <button class="btn btn-sm btn-link text-white-50 p-0" id="chatWidgetCloseBtn" title="Close">
+                    <i class="bi bi-x-lg" style="font-size: 1rem;"></i>
+                </button>
+            </div>
+            <div class="chat-widget-messages" id="chatWidgetHistory">
+                <div class="chat-widget-empty text-center py-4" id="chatWidgetEmpty">
+                    <i class="bi bi-chat-square-text text-muted" style="font-size: 2rem;"></i>
+                    <p class="text-muted mt-2 mb-2" style="font-size: 0.85rem;">Start a conversation with your AI coach</p>
+                    <div class="d-flex flex-wrap justify-content-center gap-1 px-2">
+                        <button class="btn btn-outline-secondary btn-sm chat-widget-chip" type="button">How am I doing?</button>
+                        <button class="btn btn-outline-secondary btn-sm chat-widget-chip" type="button">Analyze my sleep</button>
+                        <button class="btn btn-outline-secondary btn-sm chat-widget-chip" type="button">Should I rest today?</button>
+                        <button class="btn btn-outline-secondary btn-sm chat-widget-chip" type="button">Plan my workouts</button>
+                        <button class="btn btn-outline-secondary btn-sm chat-widget-chip" type="button">Schedule a recovery run</button>
+                        <button class="btn btn-outline-secondary btn-sm chat-widget-chip" type="button">Am I ready for a hard session?</button>
+                    </div>
+                </div>
+            </div>
+            <div class="chat-widget-input border-top px-3 py-2">
+                <form id="chatWidgetForm" class="d-flex gap-2 align-items-end">
+                    <textarea id="chatWidgetPrompt" class="form-control" rows="1"
+                        placeholder="Ask your coach..."
+                        style="resize: none; max-height: 80px; border-radius: 1rem; font-size: 0.88rem; padding: 0.5rem 0.85rem;"></textarea>
+                    <button id="chatWidgetSendBtn" class="btn btn-primary d-flex align-items-center justify-content-center"
+                        type="submit" style="width: 36px; height: 36px; border-radius: 50%; flex-shrink: 0;" title="Send">
+                        <i class="bi bi-send" id="chatWidgetSendIcon" style="font-size: 0.85rem;"></i>
+                        <div class="spinner-border spinner-border-sm d-none" id="chatWidgetSpinner" role="status"></div>
+                    </button>
+                </form>
+            </div>
+        </div>
+        <button class="chat-widget-fab" id="chatFab" title="Chat with your AI Coach">
+            <i class="bi bi-chat-dots-fill" id="chatFabIcon"></i>
+            <i class="bi bi-x-lg d-none" id="chatFabClose"></i>
+        </button>
+    </div>
+
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <script>
         (() => {
+        // ========== Sidebar toggle ==========
         const sidebar = document.getElementById('sidebar');
         const backdrop = document.getElementById('sidebar-backdrop');
-        if (!sidebar || !backdrop) {
-        return;
+        if (sidebar && backdrop) {
+            const toggleSidebar = (show) => {
+                const isShown = sidebar.classList.contains('show');
+                const shouldShow = typeof show === 'boolean' ? show : !isShown;
+                sidebar.classList.toggle('show', shouldShow);
+                backdrop.classList.toggle('d-none', !shouldShow);
+            };
+            backdrop.addEventListener('click', () => toggleSidebar(false));
+            document.querySelectorAll('[data-bs-toggle="sidebar"]').forEach(btn => {
+                btn.addEventListener('click', () => toggleSidebar());
+            });
+            window.addEventListener('resize', () => {
+                if (window.innerWidth >= 992) toggleSidebar(false);
+            });
         }
 
-        const toggleSidebar = (show) => {
-        const isShown = sidebar.classList.contains('show');
-        const shouldShow = typeof show === 'boolean' ? show : !isShown;
-        sidebar.classList.toggle('show', shouldShow);
-        backdrop.classList.toggle('d-none', !shouldShow);
-        };
+        // ========== Floating Chat Widget ==========
+        const chatFab = document.getElementById('chatFab');
+        const chatPanel = document.getElementById('chatPanel');
+        const chatFabIcon = document.getElementById('chatFabIcon');
+        const chatFabClose = document.getElementById('chatFabClose');
+        const chatCloseBtn = document.getElementById('chatWidgetCloseBtn');
+        const chatNewBtn = document.getElementById('chatWidgetNewBtn');
+        const chatForm = document.getElementById('chatWidgetForm');
+        const chatPrompt = document.getElementById('chatWidgetPrompt');
+        const chatHistory = document.getElementById('chatWidgetHistory');
+        const chatEmpty = document.getElementById('chatWidgetEmpty');
+        const chatStatus = document.getElementById('chatWidgetStatus');
+        const chatSendBtn = document.getElementById('chatWidgetSendBtn');
+        const chatSendIcon = document.getElementById('chatWidgetSendIcon');
+        const chatSpinner = document.getElementById('chatWidgetSpinner');
 
-        backdrop.addEventListener('click', () => toggleSidebar(false));
+        if (!chatFab || !chatPanel) { return; }
 
-        document.querySelectorAll('[data-bs-toggle="sidebar"]').forEach(btn => {
-        btn.addEventListener('click', () => toggleSidebar());
-        });
-
-        window.addEventListener('resize', () => {
-        if (window.innerWidth >= 992) {
-        toggleSidebar(false);
+        // Configure marked
+        if (typeof marked !== 'undefined') {
+            marked.setOptions({ breaks: true, gfm: true });
         }
+
+        const conversation = [];
+        let isPending = false;
+        let sessionId = localStorage.getItem('hat_sessionId') || null;
+        let chatOpen = false;
+        let historyLoaded = false;
+
+        function renderMd(text) {
+            if (!text) return '';
+            if (typeof marked !== 'undefined' && marked.parse) return marked.parse(text);
+            return escHtml(text).replace(/\n/g, '<br>');
+        }
+        function escHtml(v) {
+            return v.replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'})[c]);
+        }
+
+        // Toggle chat panel
+        function toggleChat(forceOpen) {
+            chatOpen = typeof forceOpen === 'boolean' ? forceOpen : !chatOpen;
+            chatPanel.classList.toggle('d-none', !chatOpen);
+            chatFabIcon.classList.toggle('d-none', chatOpen);
+            chatFabClose.classList.toggle('d-none', !chatOpen);
+            if (chatOpen) {
+                chatPrompt.focus();
+                chatHistory.scrollTop = chatHistory.scrollHeight;
+                if (!historyLoaded) { historyLoaded = true; loadHistory(); }
+            }
+        }
+
+        chatFab.addEventListener('click', () => toggleChat());
+        chatCloseBtn.addEventListener('click', () => toggleChat(false));
+
+        // New session
+        chatNewBtn.addEventListener('click', () => {
+            sessionId = null;
+            localStorage.removeItem('hat_sessionId');
+            conversation.length = 0;
+            renderConversation();
+            chatStatus.textContent = 'New conversation started';
+            setTimeout(() => { if (!isPending) chatStatus.textContent = 'Ask anything about your data'; }, 2000);
         });
+
+        // Auto-resize textarea
+        chatPrompt.addEventListener('input', () => {
+            chatPrompt.style.height = 'auto';
+            chatPrompt.style.height = Math.min(chatPrompt.scrollHeight, 80) + 'px';
+        });
+        chatPrompt.addEventListener('keydown', (ev) => {
+            if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); submitChat(); }
+        });
+
+        // Suggestion chips
+        document.querySelectorAll('.chat-widget-chip').forEach(chip => {
+            chip.addEventListener('click', () => { chatPrompt.value = chip.textContent; submitChat(); });
+        });
+
+        chatForm.addEventListener('submit', (ev) => { ev.preventDefault(); submitChat(); });
+
+        function setLoading(loading) {
+            isPending = loading;
+            chatSendBtn.disabled = loading;
+            chatSendIcon.classList.toggle('d-none', loading);
+            chatSpinner.classList.toggle('d-none', !loading);
+            chatStatus.textContent = loading ? 'Analyzing your data...' : 'Ask anything about your data';
+        }
+
+        async function submitChat() {
+            if (isPending) return;
+            const prompt = chatPrompt.value.trim();
+            if (!prompt) return;
+
+            if (!sessionId) {
+                try {
+                    const r = await fetch('/api/insights/session/new', { method: 'POST' });
+                    if (r.ok) { const j = await r.json(); sessionId = j.sessionId; localStorage.setItem('hat_sessionId', sessionId); }
+                } catch { }
+            }
+
+            setLoading(true);
+            chatPrompt.value = '';
+            chatPrompt.style.height = 'auto';
+            const userEntry = addMsg('user', prompt);
+
+            try {
+                const resp = await fetch('/api/insights/query', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ messages: conversation.map(({role, content}) => ({role, content})), sessionId })
+                });
+                if (!resp.ok) { const e = await resp.json().catch(() => ({})); throw new Error(e.error || `HTTP ${resp.status}`); }
+                const json = await resp.json();
+                const reply = (json.reply || '').trim();
+                if (reply) { userEntry.pending = false; addMsg('assistant', reply); }
+                else { removeMsg(userEntry); chatStatus.textContent = 'Coach returned an empty reply.'; }
+            } catch (err) {
+                removeMsg(userEntry);
+                chatPrompt.value = prompt;
+                chatStatus.textContent = `Error: ${err.message}`;
+                setTimeout(() => { if (!isPending) chatStatus.textContent = 'Ask anything about your data'; }, 5000);
+            }
+            setLoading(false);
+            chatPrompt.focus();
+        }
+
+        function addMsg(role, content) {
+            const entry = { role: role === 'assistant' ? 'assistant' : 'user', content, timestamp: new Date(), pending: role === 'user' };
+            conversation.push(entry);
+            renderConversation();
+            return entry;
+        }
+        function removeMsg(entry) {
+            const i = conversation.indexOf(entry);
+            if (i >= 0) { conversation.splice(i, 1); renderConversation(); }
+        }
+
+        function renderConversation() {
+            if (chatEmpty) chatEmpty.style.display = conversation.length === 0 ? 'block' : 'none';
+            chatHistory.querySelectorAll('.cw-msg, .cw-typing').forEach(el => el.remove());
+
+            for (const m of conversation) {
+                const wrap = document.createElement('div');
+                wrap.className = `cw-msg ${m.role}`;
+
+                const avatar = document.createElement('div');
+                avatar.className = 'cw-avatar';
+                avatar.innerHTML = m.role === 'user' ? '<i class="bi bi-person-fill"></i>' : '<i class="bi bi-robot"></i>';
+
+                const bubble = document.createElement('div');
+                bubble.className = 'cw-bubble';
+                if (m.role === 'assistant') bubble.innerHTML = renderMd(m.content);
+                else bubble.textContent = m.content;
+
+                const meta = document.createElement('div');
+                meta.className = 'cw-meta';
+                meta.textContent = m.timestamp instanceof Date ? m.timestamp.toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'}) : '';
+
+                wrap.appendChild(avatar);
+                const cw = document.createElement('div');
+                cw.className = 'cw-content';
+                cw.appendChild(bubble);
+                cw.appendChild(meta);
+                wrap.appendChild(cw);
+                chatHistory.appendChild(wrap);
+            }
+
+            if (isPending) {
+                const t = document.createElement('div');
+                t.className = 'cw-msg assistant cw-typing';
+                t.innerHTML = `<div class="cw-avatar"><i class="bi bi-robot"></i></div><div class="cw-content"><div class="cw-bubble"><div class="cw-dots"><span></span><span></span><span></span></div></div></div>`;
+                chatHistory.appendChild(t);
+            }
+            chatHistory.scrollTop = chatHistory.scrollHeight;
+        }
+
+        async function loadHistory() {
+            if (!sessionId) return;
+            try {
+                const r = await fetch(`/api/insights/session/${sessionId}/history`);
+                if (!r.ok) { sessionId = null; localStorage.removeItem('hat_sessionId'); return; }
+                const d = await r.json();
+                for (const msg of (d.messages || [])) {
+                    if (!msg.content?.trim()) continue;
+                    conversation.push({ role: msg.role === 'assistant' ? 'assistant' : 'user', content: msg.content.trim(), timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(), pending: false });
+                }
+                if (conversation.length > 0) {
+                    renderConversation();
+                    chatStatus.textContent = 'Conversation restored';
+                    setTimeout(() => { if (!isPending) chatStatus.textContent = 'Ask anything about your data'; }, 3000);
+                }
+            } catch { }
+        }
         })();
     </script>
+    <style>
+        /* ========== Floating Chat Widget ========== */
+        .chat-widget {
+            position: fixed;
+            bottom: 1.5rem;
+            right: 1.5rem;
+            z-index: 1050;
+            font-family: inherit;
+        }
+
+        .chat-widget-fab {
+            width: 56px;
+            height: 56px;
+            border-radius: 50%;
+            border: none;
+            background: linear-gradient(135deg, #0d6efd, #6610f2);
+            color: #fff;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            box-shadow: 0 4px 16px rgba(13, 110, 253, 0.4);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+        .chat-widget-fab:hover {
+            transform: scale(1.08);
+            box-shadow: 0 6px 24px rgba(13, 110, 253, 0.5);
+        }
+
+        .chat-widget-panel {
+            position: absolute;
+            bottom: 72px;
+            right: 0;
+            width: 380px;
+            max-height: 520px;
+            background: #fff;
+            border-radius: 1rem;
+            box-shadow: 0 8px 32px rgba(0, 0, 0, 0.18);
+            display: flex;
+            flex-direction: column;
+            overflow: hidden;
+        }
+
+        .chat-widget-header {
+            background: linear-gradient(135deg, #152238, #0d1625);
+            flex-shrink: 0;
+        }
+
+        .chat-widget-messages {
+            flex: 1;
+            overflow-y: auto;
+            padding: 0.75rem;
+            background: #f8f9fd;
+            min-height: 200px;
+            max-height: 340px;
+        }
+
+        .chat-widget-input {
+            background: #fff;
+            flex-shrink: 0;
+        }
+
+        .chat-widget-empty { color: #6c757d; }
+
+        .chat-widget-chip {
+            border-radius: 2rem;
+            font-size: 0.75rem;
+            padding: 0.25rem 0.65rem;
+            transition: all 0.15s ease;
+        }
+        .chat-widget-chip:hover {
+            background: var(--bs-primary);
+            color: #fff;
+            border-color: var(--bs-primary);
+        }
+
+        /* Chat messages (widget) */
+        .cw-msg { display: flex; gap: 0.4rem; margin-bottom: 0.65rem; max-width: 90%; }
+        .cw-msg:last-child { margin-bottom: 0; }
+        .cw-msg.user { flex-direction: row-reverse; margin-left: auto; }
+        .cw-msg.assistant { margin-right: auto; }
+
+        .cw-avatar {
+            width: 26px; height: 26px; border-radius: 50%;
+            display: flex; align-items: center; justify-content: center;
+            flex-shrink: 0; font-size: 0.75rem;
+        }
+        .cw-msg.user .cw-avatar { background: var(--bs-primary); color: #fff; }
+        .cw-msg.assistant .cw-avatar { background: #e9ecef; color: #495057; }
+
+        .cw-content { display: flex; flex-direction: column; }
+        .cw-msg.user .cw-content { align-items: flex-end; }
+
+        .cw-bubble {
+            padding: 0.5rem 0.75rem; border-radius: 0.9rem;
+            font-size: 0.85rem; line-height: 1.5;
+            box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+            word-wrap: break-word; overflow-wrap: break-word;
+        }
+        .cw-msg.user .cw-bubble { background: var(--bs-primary); color: #fff; border-bottom-right-radius: 0.2rem; }
+        .cw-msg.assistant .cw-bubble { background: #fff; color: #212529; border: 1px solid #e9ecef; border-bottom-left-radius: 0.2rem; }
+
+        .cw-msg.assistant .cw-bubble p { margin-bottom: 0.3rem; }
+        .cw-msg.assistant .cw-bubble p:last-child { margin-bottom: 0; }
+        .cw-msg.assistant .cw-bubble ul, .cw-msg.assistant .cw-bubble ol { margin-bottom: 0.3rem; padding-left: 1.1rem; }
+        .cw-msg.assistant .cw-bubble li { margin-bottom: 0.15rem; }
+        .cw-msg.assistant .cw-bubble strong { color: var(--bs-primary); }
+        .cw-msg.assistant .cw-bubble h1,.cw-msg.assistant .cw-bubble h2,
+        .cw-msg.assistant .cw-bubble h3,.cw-msg.assistant .cw-bubble h4 {
+            font-size: 0.88rem; font-weight: 700; margin-top: 0.4rem; margin-bottom: 0.2rem;
+        }
+        .cw-msg.assistant .cw-bubble code { font-size: 0.8em; background: #f1f3f5; padding: 0.1rem 0.3rem; border-radius: 0.25rem; }
+
+        .cw-meta { font-size: 0.63rem; color: #adb5bd; margin-top: 0.15rem; padding: 0 0.2rem; }
+
+        .cw-dots { display: flex; gap: 3px; padding: 0.15rem 0; }
+        .cw-dots span { width: 6px; height: 6px; border-radius: 50%; background: #adb5bd; animation: cw-bounce 1.4s ease-in-out infinite; }
+        .cw-dots span:nth-child(2) { animation-delay: 0.2s; }
+        .cw-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+        @@keyframes cw-bounce {
+            0%, 60%, 100% { transform: translateY(0); opacity: 0.4; }
+            30% { transform: translateY(-5px); opacity: 1; }
+        }
+
+        /* Mobile responsive */
+        @@media (max-width: 480px) {
+            .chat-widget { bottom: 1rem; right: 1rem; left: 1rem; }
+            .chat-widget-panel { width: auto; left: 0; right: 0; max-height: 70vh; }
+            .chat-widget-fab { width: 48px; height: 48px; font-size: 1.25rem; }
+        }
+    </style>
     @RenderSection("Scripts", required: false)
 </body>
 

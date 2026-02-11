@@ -128,10 +128,12 @@ public record CalendarRaceConfiguration(
 
 public record DailyRecommendationSections(
     string RecentSummary,
-    string UpcomingOutlook
+    string UpcomingOutlook,
+    string? SuggestedWorkout = null
 );
 
 public record DailyRecommendationHtmlSections(
     string RecentSummary,
-    string UpcomingOutlook
+    string UpcomingOutlook,
+    string? SuggestedWorkout = null
 );
