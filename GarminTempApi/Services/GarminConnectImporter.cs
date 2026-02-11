@@ -69,6 +69,12 @@ public class GarminConnectImporter
         var endDate = overrideEndDate?.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture)
             ?? GetConfigValue("EndDate")
             ?? Environment.GetEnvironmentVariable("GARMIN_END_DATE");
+
+        if (string.IsNullOrWhiteSpace(endDate))
+        {
+            endDate = DateTime.Today.ToString("yyyy-MM-dd", CultureInfo.InvariantCulture);
+        }
+
         var maxCountValue = GetConfigValue("MaxCount") ?? Environment.GetEnvironmentVariable("GARMIN_MAX_ACTIVITIES");
         var stepsOnly = ShouldFetchStepsOnly();
 

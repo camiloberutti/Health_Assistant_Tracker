@@ -54,7 +54,7 @@ def _ensure_date_window(start_date: Optional[date], end_date: Optional[date]) ->
         end_date = today
         start_date = end_date - timedelta(days=6)
     elif start_date and not end_date:
-        end_date = start_date
+        end_date = today
     elif end_date and not start_date:
         start_date = end_date - timedelta(days=6)
 
