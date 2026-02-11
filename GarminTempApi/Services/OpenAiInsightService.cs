@@ -329,7 +329,7 @@ GUIDELINES:
 
         request.Headers.UserAgent.Clear();
         request.Headers.UserAgent.Add(new ProductInfoHeaderValue("GarminTempApi", "1.0"));
-        request.Headers.UserAgent.Add(new ProductInfoHeaderValue("(+https://github.com/camiloberutti/App_Garmin)"));
+        request.Headers.UserAgent.Add(new ProductInfoHeaderValue("(+https://github.com/camiloberutti/Health_Assistant_Tracker)"));
 
         if (IsAzureEndpoint(options.BaseUrl))
         {

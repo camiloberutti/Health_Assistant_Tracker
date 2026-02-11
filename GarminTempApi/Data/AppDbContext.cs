@@ -15,6 +15,8 @@ namespace GarminTempApi.Data
         public DbSet<ActivityDetailSnapshot> ActivityDetailSnapshots { get; set; }
         public DbSet<RecommendationFeedback> RecommendationFeedback { get; set; }
         public DbSet<RoutineEvent> RoutineEvents { get; set; }
+        public DbSet<ChatSession> ChatSessions { get; set; }
+        public DbSet<ChatSessionMessage> ChatSessionMessages { get; set; }
 
         protected override void OnModelCreating(ModelBuilder modelBuilder)
         {
@@ -85,6 +87,31 @@ namespace GarminTempApi.Data
                 entity.HasIndex(e => e.StartLocal);
                 entity.HasIndex(e => e.EndLocal);
                 entity.HasIndex(e => e.IsRecurring);
+            });
+
+            modelBuilder.Entity<ChatSession>(entity =>
+            {
+                entity.HasIndex(e => e.SessionId).IsUnique();
+                entity.Property(e => e.SessionId).HasMaxLength(64).IsRequired();
+                entity.Property(e => e.Summary).HasMaxLength(500);
+                entity.Property(e => e.CreatedUtc)
+                    .HasConversion(v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+                entity.Property(e => e.LastMessageUtc)
+                    .HasConversion(v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+            });
+
+            modelBuilder.Entity<ChatSessionMessage>(entity =>
+            {
+                entity.HasOne(m => m.ChatSession)
+                    .WithMany(s => s.Messages)
+                    .HasForeignKey(m => m.ChatSessionId)
+                    .OnDelete(DeleteBehavior.Cascade);
+
+                entity.Property(m => m.Role).HasMaxLength(20).IsRequired();
+                entity.Property(m => m.TimestampUtc)
+                    .HasConversion(v => v, v => DateTime.SpecifyKind(v, DateTimeKind.Utc));
+
+                entity.HasIndex(m => m.ChatSessionId);
             });
         }
     }

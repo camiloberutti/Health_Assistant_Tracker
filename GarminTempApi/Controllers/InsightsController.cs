@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using System.Text.Json;
 using System.Text.Json.Serialization;
 using System.Threading;
@@ -9,6 +10,7 @@ using GarminTempApi.Models;
 using GarminTempApi.Services;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Logging;
 
 namespace GarminTempApi.Controllers
@@ -17,15 +19,18 @@ namespace GarminTempApi.Controllers
     [Route("api/insights")]
     public class InsightsController : ControllerBase
     {
+        private readonly SemanticKernelInsightService _skService;
         private readonly IOpenAiInsightService _insightService;
         private readonly AppDbContext _dbContext;
         private readonly ILogger<InsightsController> _logger;
 
         public InsightsController(
+            SemanticKernelInsightService skService,
             IOpenAiInsightService insightService,
             AppDbContext dbContext,
             ILogger<InsightsController> logger)
         {
+            _skService = skService;
             _insightService = insightService;
             _dbContext = dbContext;
             _logger = logger;
@@ -38,7 +43,8 @@ namespace GarminTempApi.Controllers
         public record QueryRequest(
             [property: JsonPropertyName("prompt")] string? Prompt,
             [property: JsonPropertyName("messages")] IReadOnlyList<ChatMessageDto>? Messages,
-            [property: JsonPropertyName("context")] JsonElement? Context);
+            [property: JsonPropertyName("context")] JsonElement? Context,
+            [property: JsonPropertyName("sessionId")] string? SessionId);
 
         public record FeedbackRequest(
             [property: JsonPropertyName("helpful")] bool? Helpful,
@@ -50,7 +56,8 @@ namespace GarminTempApi.Controllers
         {
             try
             {
-                var recommendation = await _insightService.GenerateDailyRecommendationAsync(DateTime.UtcNow, cancellationToken);
+                // Use the SK-powered service for daily recommendations (with tool calling)
+                var recommendation = await _skService.GenerateDailyRecommendationAsync(DateTime.UtcNow, cancellationToken);
                 return Ok(new { recommendation });
             }
             catch (InvalidOperationException ex)
@@ -105,8 +112,17 @@ namespace GarminTempApi.Controllers
 
             try
             {
-                var reply = await _insightService.RunChatQueryAsync(chatMessages, cancellationToken);
-                return Ok(new { reply });
+                // Use the SK-powered service for chat (with tool calling)
+                var reply = await _skService.RunChatQueryAsync(chatMessages, cancellationToken);
+
+                // Persist conversation if a session ID is provided
+                string? sessionId = request.SessionId;
+                if (!string.IsNullOrWhiteSpace(sessionId))
+                {
+                    await PersistChatMessagesAsync(sessionId, chatMessages.Last(), reply, cancellationToken);
+                }
+
+                return Ok(new { reply, sessionId });
             }
             catch (ArgumentException ex)
             {
@@ -123,6 +139,42 @@ namespace GarminTempApi.Controllers
                 _logger.LogError(ex, "Unexpected failure while processing insight query.");
                 return StatusCode(StatusCodes.Status500InternalServerError, new { error = "Failed to process query." });
             }
+        }
+
+        [HttpPost("session/new")]
+        public async Task<IActionResult> CreateSession(CancellationToken cancellationToken)
+        {
+            var session = new ChatSession
+            {
+                SessionId = Guid.NewGuid().ToString("N"),
+                CreatedUtc = DateTime.UtcNow,
+                LastMessageUtc = DateTime.UtcNow
+            };
+
+            _dbContext.ChatSessions.Add(session);
+            await _dbContext.SaveChangesAsync(cancellationToken);
+
+            return Ok(new { sessionId = session.SessionId });
+        }
+
+        [HttpGet("session/{sessionId}/history")]
+        public async Task<IActionResult> GetSessionHistory(string sessionId, CancellationToken cancellationToken)
+        {
+            var session = await _dbContext.ChatSessions
+                .Include(s => s.Messages.OrderBy(m => m.TimestampUtc))
+                .FirstOrDefaultAsync(s => s.SessionId == sessionId, cancellationToken);
+
+            if (session is null)
+                return NotFound(new { error = "Session not found." });
+
+            var messages = session.Messages.Select(m => new
+            {
+                role = m.Role,
+                content = m.Content,
+                timestamp = m.TimestampUtc
+            }).ToList();
+
+            return Ok(new { sessionId, messages });
         }
 
         [HttpPost("feedback")]
@@ -145,6 +197,51 @@ namespace GarminTempApi.Controllers
             await _dbContext.SaveChangesAsync(cancellationToken);
 
             return Ok(new { id = entity.Id });
+        }
+
+        private async Task PersistChatMessagesAsync(string sessionId, InsightChatMessage userMessage, string aiReply, CancellationToken cancellationToken)
+        {
+            try
+            {
+                var session = await _dbContext.ChatSessions
+                    .FirstOrDefaultAsync(s => s.SessionId == sessionId, cancellationToken);
+
+                if (session is null)
+                {
+                    session = new ChatSession
+                    {
+                        SessionId = sessionId,
+                        CreatedUtc = DateTime.UtcNow,
+                        LastMessageUtc = DateTime.UtcNow
+                    };
+                    _dbContext.ChatSessions.Add(session);
+                    await _dbContext.SaveChangesAsync(cancellationToken);
+                }
+
+                session.LastMessageUtc = DateTime.UtcNow;
+
+                _dbContext.ChatSessionMessages.Add(new ChatSessionMessage
+                {
+                    ChatSessionId = session.Id,
+                    Role = userMessage.Role,
+                    Content = userMessage.Content,
+                    TimestampUtc = DateTime.UtcNow
+                });
+
+                _dbContext.ChatSessionMessages.Add(new ChatSessionMessage
+                {
+                    ChatSessionId = session.Id,
+                    Role = "assistant",
+                    Content = aiReply,
+                    TimestampUtc = DateTime.UtcNow
+                });
+
+                await _dbContext.SaveChangesAsync(cancellationToken);
+            }
+            catch (Exception ex)
+            {
+                _logger.LogWarning(ex, "Failed to persist chat session {SessionId}", sessionId);
+            }
         }
     }
 }

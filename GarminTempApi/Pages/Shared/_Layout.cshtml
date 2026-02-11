@@ -1,5 +1,5 @@
 @{
-    var title = "App Garmin";
+    var title = "Health Assistant Tracker";
     var currentPath = Context?.Request?.Path.Value ?? "/";
     currentPath = currentPath.TrimEnd('/');
     if (string.IsNullOrEmpty(currentPath))
@@ -33,131 +33,131 @@
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" />
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" />
     <style>
-        :root {
-            --sidebar-width: 268px;
-            --sidebar-bg-start: #152238;
-            --sidebar-bg-end: #0d1625;
-        }
+            :root {
+                --sidebar-width: 268px;
+                --sidebar-bg-start: #152238;
+                --sidebar-bg-end: #0d1625;
+            }
 
-        html,
-        body {
-            height: 100%;
-        }
+            html,
+            body {
+                height: 100%;
+            }
 
-        body {
-            margin: 0;
-            background: #f5f6fb;
-        }
+            body {
+                margin: 0;
+                background: #f5f6fb;
+            }
 
-        .app-shell {
-            min-height: 100vh;
-        }
+            .app-shell {
+                min-height: 100vh;
+            }
 
-        .sidebar {
-            width: var(--sidebar-width);
-            background: linear-gradient(180deg, var(--sidebar-bg-start) 0%, var(--sidebar-bg-end) 100%);
-            box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.05), 6px 0 24px rgba(15, 23, 42, 0.24);
-            color: #eef2ff;
-        }
-
-        .sidebar-header {
-            padding: 1.1rem 1.35rem 0.9rem;
-        }
-
-        .sidebar-header small {
-            color: rgba(238, 242, 255, 0.6);
-            font-size: 0.8rem;
-            letter-spacing: 0.04em;
-        }
-
-        .sidebar-nav {
-            padding: 0 1.1rem 1.5rem;
-        }
-
-        .sidebar-nav .nav-link {
-            display: flex;
-            align-items: center;
-            gap: 0.75rem;
-            color: rgba(238, 242, 255, 0.72);
-            border-radius: 0.75rem;
-            padding: 0.65rem 0.85rem;
-            font-weight: 500;
-            transition: background-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
-        }
-
-        .sidebar-nav .nav-link i {
-            font-size: 1.15rem;
-        }
-
-        .sidebar-nav .nav-link .icon-steps {
-            width: 1.25rem;
-            height: 1.25rem;
-            flex-shrink: 0;
-        }
-
-        .sidebar-nav .nav-link.active {
-            background: rgba(88, 140, 255, 0.25);
-            color: #ffffff;
-            box-shadow: 0 6px 18px rgba(88, 140, 255, 0.25);
-        }
-
-        .sidebar-nav .nav-link:hover {
-            background: rgba(255, 255, 255, 0.15);
-            color: #ffffff;
-            transform: translateX(4px);
-        }
-
-        .sidebar-footer {
-            padding: 1rem 1.35rem 1.35rem;
-            border-top: 1px solid rgba(255, 255, 255, 0.08);
-            color: rgba(238, 242, 255, 0.65);
-            font-size: 0.85rem;
-        }
-
-        .app-main {
-            background: transparent;
-        }
-
-        .app-content {
-            max-width: 1100px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-
-        .mobile-header {
-            background: linear-gradient(90deg, var(--sidebar-bg-start) 0%, var(--sidebar-bg-end) 100%);
-        }
-
-        @@media (max-width: 992px) {
             .sidebar {
-                position: fixed;
-                inset: 0;
-                z-index: 1045;
-                transform: translateX(-100%);
-                transition: transform 0.22s ease-in-out;
-                max-width: 320px;
+                width: var(--sidebar-width);
+                background: linear-gradient(180deg, var(--sidebar-bg-start) 0%, var(--sidebar-bg-end) 100%);
+                box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.05), 6px 0 24px rgba(15, 23, 42, 0.24);
+                color: #eef2ff;
             }
 
-            .sidebar.show {
-                transform: translateX(0);
+            .sidebar-header {
+                padding: 1.1rem 1.35rem 0.9rem;
             }
 
-            .sidebar-backdrop {
-                position: fixed;
-                inset: 0;
-                background: rgba(15, 23, 42, 0.55);
-                z-index: 1040;
+            .sidebar-header small {
+                color: rgba(238, 242, 255, 0.6);
+                font-size: 0.8rem;
+                letter-spacing: 0.04em;
+            }
+
+            .sidebar-nav {
+                padding: 0 1.1rem 1.5rem;
+            }
+
+            .sidebar-nav .nav-link {
+                display: flex;
+                align-items: center;
+                gap: 0.75rem;
+                color: rgba(238, 242, 255, 0.72);
+                border-radius: 0.75rem;
+                padding: 0.65rem 0.85rem;
+                font-weight: 500;
+                transition: background-color 0.16s ease, color 0.16s ease, transform 0.16s ease;
+            }
+
+            .sidebar-nav .nav-link i {
+                font-size: 1.15rem;
+            }
+
+            .sidebar-nav .nav-link .icon-steps {
+                width: 1.25rem;
+                height: 1.25rem;
+                flex-shrink: 0;
+            }
+
+            .sidebar-nav .nav-link.active {
+                background: rgba(88, 140, 255, 0.25);
+                color: #ffffff;
+                box-shadow: 0 6px 18px rgba(88, 140, 255, 0.25);
+            }
+
+            .sidebar-nav .nav-link:hover {
+                background: rgba(255, 255, 255, 0.15);
+                color: #ffffff;
+                transform: translateX(4px);
+            }
+
+            .sidebar-footer {
+                padding: 1rem 1.35rem 1.35rem;
+                border-top: 1px solid rgba(255, 255, 255, 0.08);
+                color: rgba(238, 242, 255, 0.65);
+                font-size: 0.85rem;
             }
 
             .app-main {
-                padding-top: 4rem;
+                background: transparent;
             }
 
             .app-content {
-                padding-left: 1.25rem;
-                padding-right: 1.25rem;
+                max-width: 1100px;
+                margin-left: auto;
+                margin-right: auto;
             }
-        }
+
+            .mobile-header {
+                background: linear-gradient(90deg, var(--sidebar-bg-start) 0%, var(--sidebar-bg-end) 100%);
+            }
+
+            @@media (max-width: 992px) {
+                .sidebar {
+                    position: fixed;
+                    inset: 0;
+                    z-index: 1045;
+                    transform: translateX(-100%);
+                    transition: transform 0.22s ease-in-out;
+                    max-width: 320px;
+                }
+
+                .sidebar.show {
+                    transform: translateX(0);
+                }
+
+                .sidebar-backdrop {
+                    position: fixed;
+                    inset: 0;
+                    background: rgba(15, 23, 42, 0.55);
+                    z-index: 1040;
+                }
+
+                .app-main {
+                    padding-top: 4rem;
+                }
+
+                .app-content {
+                    padding-left: 1.25rem;
+                    padding-right: 1.25rem;
+                }
+            }
     </style>
 </head>
 
@@ -173,12 +173,12 @@
                         <i class="bi bi-compass"></i>
                     </span>
                     <span class="d-flex flex-column">
-                        <span>Health Tracker</span>
-                        <small>Training overview</small>
+                        <span>Health Assistant</span>
+                        <small>Training & Recovery</small>
                     </span>
                 </a>
                 <button class="btn btn-outline-light btn-sm d-lg-none" type="button" data-bs-toggle="sidebar"
-                    aria-label="Close menu">
+                        aria-label="Close menu">
                     <i class="bi bi-x-lg"></i>
                 </button>
             </div>
@@ -207,13 +207,13 @@
                         <a class="nav-link @(IsActive("/Steps") ? "active" : null)" href="/Steps">
                             <svg class="icon-steps" viewBox="0 0 24 24" aria-hidden="true" focusable="false">
                                 <path
-                                    d="M4.75 13.75V11.5c0-1.8 1.45-3.25 3.25-3.25h1.15c.63 0 1.22-.3 1.59-.82l1.34-1.85a2 2 0 011.63-.83h1.25c.77 0 1.49.37 1.94.99l1.12 1.57a3.5 3.5 0 001.86 1.29l2.34.64c.88.24 1.53 1.04 1.53 1.95V14a3.5 3.5 0 01-3.5 3.5H6.75a2 2 0 01-2-2Z"
-                                    fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
-                                    stroke-linejoin="round" />
+                                d="M4.75 13.75V11.5c0-1.8 1.45-3.25 3.25-3.25h1.15c.63 0 1.22-.3 1.59-.82l1.34-1.85a2 2 0 011.63-.83h1.25c.77 0 1.49.37 1.94.99l1.12 1.57a3.5 3.5 0 001.86 1.29l2.34.64c.88.24 1.53 1.04 1.53 1.95V14a3.5 3.5 0 01-3.5 3.5H6.75a2 2 0 01-2-2Z"
+                                fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"
+                                stroke-linejoin="round" />
                                 <path d="M5.5 16.5H17.5" fill="none" stroke="currentColor" stroke-width="1.6"
-                                    stroke-linecap="round" stroke-linejoin="round" />
+                                      stroke-linecap="round" stroke-linejoin="round" />
                                 <path d="M9.5 11.5h3" fill="none" stroke="currentColor" stroke-width="1.6"
-                                    stroke-linecap="round" />
+                                      stroke-linecap="round" />
                             </svg>
                             <span>Steps</span>
                         </a>
@@ -239,7 +239,7 @@
                     <span>Latest Garmin data appears here as soon as it lands.</span>
                 </div>
                 <button class="btn btn-outline-light btn-sm w-100 mt-3 d-lg-none" type="button"
-                    data-bs-toggle="sidebar">
+                        data-bs-toggle="sidebar">
                     Close menu
                 </button>
             </div>
@@ -247,7 +247,7 @@
 
         <div class="app-main flex-grow-1">
             <header class="mobile-header d-lg-none p-3 text-white d-flex align-items-center justify-content-between">
-                <span class="fw-semibold">App Garmin</span>
+                <span class="fw-semibold">Health Assistant</span>
                 <button class="btn btn-outline-light btn-sm" type="button" data-bs-toggle="sidebar">
                     <i class="bi bi-list"></i>
                 </button>
@@ -261,30 +261,30 @@
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
         (() => {
-            const sidebar = document.getElementById('sidebar');
-            const backdrop = document.getElementById('sidebar-backdrop');
-            if (!sidebar || !backdrop) {
-                return;
-            }
+        const sidebar = document.getElementById('sidebar');
+        const backdrop = document.getElementById('sidebar-backdrop');
+        if (!sidebar || !backdrop) {
+        return;
+        }
 
-            const toggleSidebar = (show) => {
-                const isShown = sidebar.classList.contains('show');
-                const shouldShow = typeof show === 'boolean' ? show : !isShown;
-                sidebar.classList.toggle('show', shouldShow);
-                backdrop.classList.toggle('d-none', !shouldShow);
-            };
+        const toggleSidebar = (show) => {
+        const isShown = sidebar.classList.contains('show');
+        const shouldShow = typeof show === 'boolean' ? show : !isShown;
+        sidebar.classList.toggle('show', shouldShow);
+        backdrop.classList.toggle('d-none', !shouldShow);
+        };
 
-            backdrop.addEventListener('click', () => toggleSidebar(false));
+        backdrop.addEventListener('click', () => toggleSidebar(false));
 
-            document.querySelectorAll('[data-bs-toggle="sidebar"]').forEach(btn => {
-                btn.addEventListener('click', () => toggleSidebar());
-            });
+        document.querySelectorAll('[data-bs-toggle="sidebar"]').forEach(btn => {
+        btn.addEventListener('click', () => toggleSidebar());
+        });
 
-            window.addEventListener('resize', () => {
-                if (window.innerWidth >= 992) {
-                    toggleSidebar(false);
-                }
-            });
+        window.addEventListener('resize', () => {
+        if (window.innerWidth >= 992) {
+        toggleSidebar(false);
+        }
+        });
         })();
     </script>
     @RenderSection("Scripts", required: false)

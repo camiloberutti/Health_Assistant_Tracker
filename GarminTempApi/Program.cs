@@ -100,6 +100,9 @@ builder.Services.AddHttpClient<IOpenAiInsightService, OpenAiInsightService>(clie
     client.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/json"));
 });
 
+// Register Semantic Kernel-powered insight service (wraps the legacy one)
+builder.Services.AddScoped<SemanticKernelInsightService>();
+
 var seedSampleSteps = ShouldSeedSampleSteps(builder.Configuration);
 var syncOnce = ShouldRunSyncOnce();
 
@@ -146,6 +149,22 @@ using (var scope = app.Services.CreateScope())
             RecurrenceEndLocal TEXT NULL,
             CreatedUtc TEXT NOT NULL,
             UpdatedUtc TEXT NOT NULL
+        );");
+    db.Database.ExecuteSqlRaw(@"CREATE TABLE IF NOT EXISTS ChatSessions (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            SessionId TEXT NOT NULL UNIQUE,
+            CreatedUtc TEXT NOT NULL,
+            LastMessageUtc TEXT NOT NULL,
+            Summary TEXT NULL
+        );");
+    db.Database.ExecuteSqlRaw(@"CREATE TABLE IF NOT EXISTS ChatSessionMessages (
+            Id INTEGER PRIMARY KEY AUTOINCREMENT,
+            ChatSessionId INTEGER NOT NULL,
+            Role TEXT NOT NULL,
+            Content TEXT NOT NULL,
+            TimestampUtc TEXT NOT NULL,
+            ToolCallsJson TEXT NULL,
+            FOREIGN KEY(ChatSessionId) REFERENCES ChatSessions(Id) ON DELETE CASCADE
         );");
     var connection = db.Database.GetDbConnection();
     EnsureSleepSummaryColumns(connection);

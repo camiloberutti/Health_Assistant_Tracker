@@ -41,6 +41,11 @@
                     <h5 class="mb-0 fs-6">Performance Coach</h5>
                     <small class="text-muted" id="chatStatus">Ask anything about your training data</small>
                 </div>
+                <div class="ms-auto">
+                    <button class="btn btn-sm btn-outline-secondary" id="newSessionBtn" title="Start new conversation">
+                        <i class="bi bi-plus-circle"></i> New Chat
+                    </button>
+                </div>
             </div>
 
             <div class="chat-messages flex-grow-1 overflow-auto px-4 py-3" id="chatHistory">
@@ -51,7 +56,9 @@
                         <button class="btn btn-outline-secondary btn-sm suggestion-chip" type="button">How am I doing this week?</button>
                         <button class="btn btn-outline-secondary btn-sm suggestion-chip" type="button">Analyze my sleep quality</button>
                         <button class="btn btn-outline-secondary btn-sm suggestion-chip" type="button">Should I rest today?</button>
-                        <button class="btn btn-outline-secondary btn-sm suggestion-chip" type="button">Training volume trend</button>
+                        <button class="btn btn-outline-secondary btn-sm suggestion-chip" type="button">Plan my workouts for this week</button>
+                        <button class="btn btn-outline-secondary btn-sm suggestion-chip" type="button">Schedule a recovery run for tomorrow</button>
+                        <button class="btn btn-outline-secondary btn-sm suggestion-chip" type="button">Am I ready for a hard session?</button>
                     </div>
                 </div>
             </div>
@@ -90,9 +97,11 @@
         const sendIcon = document.getElementById('sendIcon');
         const sendSpinner = document.getElementById('sendSpinner');
         const form = document.getElementById('event-form');
+        const newSessionBtn = document.getElementById('newSessionBtn');
 
         const conversation = [];
         let isPending = false;
+        let sessionId = localStorage.getItem('hat_sessionId') || null;
 
         // Configure marked for safe rendering
         if (typeof marked !== 'undefined') {
@@ -136,13 +145,94 @@
             });
         });
 
+        // New session button
+        newSessionBtn.addEventListener('click', () => {
+            sessionId = null;
+            localStorage.removeItem('hat_sessionId');
+            conversation.length = 0;
+            renderConversation();
+            statusEl.textContent = 'New conversation started';
+            setTimeout(() => {
+                if (!isPending) statusEl.textContent = 'Ask anything about your training data';
+            }, 2000);
+        });
+
         form.addEventListener('submit', (ev) => {
             ev.preventDefault();
             submitPrompt();
         });
 
-        // ---------- Daily recommendation ----------
+        // ---------- Daily recommendation (with localStorage cache) ----------
+        function getDailyCacheKey() {
+            return 'hat_daily_' + new Date().toISOString().slice(0, 10);
+        }
+
+        function renderDailyRecommendation(raw) {
+            if (!raw) {
+                dailyEl.innerHTML = '<p class="text-muted mb-0">No recommendation available yet.</p>';
+                return;
+            }
+
+            let parsed = null;
+            try {
+                const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
+                parsed = JSON.parse(cleaned);
+            } catch { }
+
+            if (parsed && (parsed.recent_summary || parsed.upcoming_outlook)) {
+                let html = '<div class="row g-3">';
+                if (parsed.recent_summary) {
+                    html += `
+                        <div class="col-md-4">
+                            <div class="d-flex align-items-start gap-2">
+                                <i class="bi bi-clock-history text-primary mt-1"></i>
+                                <div>
+                                    <div class="fw-semibold small text-uppercase text-muted mb-1">Recent Summary</div>
+                                    <div class="recommendation-text">${renderMarkdown(parsed.recent_summary)}</div>
+                                </div>
+                            </div>
+                        </div>`;
+                }
+                if (parsed.upcoming_outlook) {
+                    html += `
+                        <div class="col-md-4">
+                            <div class="d-flex align-items-start gap-2">
+                                <i class="bi bi-arrow-right-circle text-success mt-1"></i>
+                                <div>
+                                    <div class="fw-semibold small text-uppercase text-muted mb-1">Upcoming Outlook</div>
+                                    <div class="recommendation-text">${renderMarkdown(parsed.upcoming_outlook)}</div>
+                                </div>
+                            </div>
+                        </div>`;
+                }
+                if (parsed.suggested_workout) {
+                    html += `
+                        <div class="col-md-4">
+                            <div class="d-flex align-items-start gap-2">
+                                <i class="bi bi-lightning-charge text-warning mt-1"></i>
+                                <div>
+                                    <div class="fw-semibold small text-uppercase text-muted mb-1">Suggested Workout</div>
+                                    <div class="recommendation-text">${renderMarkdown(parsed.suggested_workout)}</div>
+                                </div>
+                            </div>
+                        </div>`;
+                }
+                html += '</div>';
+                dailyEl.innerHTML = html;
+            } else {
+                dailyEl.innerHTML = `<div class="recommendation-text">${renderMarkdown(raw)}</div>`;
+            }
+        }
+
         async function loadDailyRecommendation() {
+            // Check localStorage cache first
+            const cacheKey = getDailyCacheKey();
+            const cached = localStorage.getItem(cacheKey);
+            if (cached) {
+                renderDailyRecommendation(cached);
+                return;
+            }
+
             try {
                 const response = await fetch('/api/insights/daily');
                 if (!response.ok) {
@@ -151,51 +241,19 @@
                 }
                 const json = await response.json();
                 const raw = (json.recommendation || '').trim();
-                if (!raw) {
-                    dailyEl.innerHTML = '<p class="text-muted mb-0">No recommendation available yet.</p>';
-                    return;
+
+                if (raw) {
+                    // Cache for today — clear old keys
+                    for (let i = 0; i < localStorage.length; i++) {
+                        const key = localStorage.key(i);
+                        if (key && key.startsWith('hat_daily_') && key !== cacheKey) {
+                            localStorage.removeItem(key);
+                        }
+                    }
+                    localStorage.setItem(cacheKey, raw);
                 }
 
-                // Try to parse JSON structure from GPT
-                let parsed = null;
-                try {
-                    // Strip markdown code fences if present
-                    const cleaned = raw.replace(/^```(?:json)?\s*/i, '').replace(/\s*```\s*$/i, '').trim();
-                    parsed = JSON.parse(cleaned);
-                } catch { }
-
-                if (parsed && (parsed.recent_summary || parsed.upcoming_outlook)) {
-                    let html = '<div class="row g-3">';
-                    if (parsed.recent_summary) {
-                        html += `
-                            <div class="col-md-6">
-                                <div class="d-flex align-items-start gap-2">
-                                    <i class="bi bi-clock-history text-primary mt-1"></i>
-                                    <div>
-                                        <div class="fw-semibold small text-uppercase text-muted mb-1">Recent Summary</div>
-                                        <div class="recommendation-text">${renderMarkdown(parsed.recent_summary)}</div>
-                                    </div>
-                                </div>
-                            </div>`;
-                    }
-                    if (parsed.upcoming_outlook) {
-                        html += `
-                            <div class="col-md-6">
-                                <div class="d-flex align-items-start gap-2">
-                                    <i class="bi bi-arrow-right-circle text-success mt-1"></i>
-                                    <div>
-                                        <div class="fw-semibold small text-uppercase text-muted mb-1">Upcoming Outlook</div>
-                                        <div class="recommendation-text">${renderMarkdown(parsed.upcoming_outlook)}</div>
-                                    </div>
-                                </div>
-                            </div>`;
-                    }
-                    html += '</div>';
-                    dailyEl.innerHTML = html;
-                } else {
-                    // Fallback: render as markdown
-                    dailyEl.innerHTML = `<div class="recommendation-text">${renderMarkdown(raw)}</div>`;
-                }
+                renderDailyRecommendation(raw);
             } catch (err) {
                 dailyEl.innerHTML = `<div class="d-flex align-items-center gap-2 text-danger">
                     <i class="bi bi-exclamation-triangle"></i>
@@ -210,7 +268,7 @@
             sendBtn.disabled = loading;
             sendIcon.classList.toggle('d-none', loading);
             sendSpinner.classList.toggle('d-none', !loading);
-            statusEl.textContent = loading ? 'Coach is thinking...' : 'Ask anything about your training data';
+            statusEl.textContent = loading ? 'Coach is analyzing your data & calendar...' : 'Ask anything about your training data';
         }
 
         async function submitPrompt() {
@@ -218,6 +276,18 @@
 
             const prompt = promptEl.value.trim();
             if (!prompt) return;
+
+            // Create a session if we don't have one
+            if (!sessionId) {
+                try {
+                    const sessionResp = await fetch('/api/insights/session/new', { method: 'POST' });
+                    if (sessionResp.ok) {
+                        const sessionJson = await sessionResp.json();
+                        sessionId = sessionJson.sessionId;
+                        localStorage.setItem('hat_sessionId', sessionId);
+                    }
+                } catch { /* proceed without session persistence */ }
+            }
 
             setLoading(true);
             promptEl.value = '';
@@ -230,7 +300,8 @@
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({
-                        messages: conversation.map(({ role, content }) => ({ role, content }))
+                        messages: conversation.map(({ role, content }) => ({ role, content })),
+                        sessionId: sessionId
                     })
                 });
 
@@ -350,7 +421,45 @@
             }, 5000);
         }
 
+        // ---------- Load chat history from server ----------
+        async function loadChatHistory() {
+            if (!sessionId) return;
+            try {
+                const resp = await fetch(`/api/insights/session/${sessionId}/history`);
+                if (!resp.ok) {
+                    // Session expired or not found — clear it
+                    sessionId = null;
+                    localStorage.removeItem('hat_sessionId');
+                    return;
+                }
+                const data = await resp.json();
+                const messages = data.messages || [];
+                if (messages.length === 0) return;
+
+                for (const msg of messages) {
+                    if (!msg.content || !msg.content.trim()) continue;
+                    conversation.push({
+                        role: msg.role === 'assistant' ? 'assistant' : 'user',
+                        content: msg.content.trim(),
+                        timestamp: msg.timestamp ? new Date(msg.timestamp) : new Date(),
+                        pending: false
+                    });
+                }
+                if (conversation.length > 0) {
+                    renderConversation();
+                    statusEl.textContent = 'Previous conversation restored';
+                    setTimeout(() => {
+                        if (!isPending) statusEl.textContent = 'Ask anything about your training data';
+                    }, 3000);
+                }
+            } catch {
+                // Silently fail — user can start a new session
+            }
+        }
+
+        // Initialize
         loadDailyRecommendation();
+        loadChatHistory();
     })();
     </script>
     <style>
