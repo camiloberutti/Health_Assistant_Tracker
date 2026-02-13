@@ -225,6 +225,14 @@
                     <div id="pcaScatter2d" style="width:100%;height:420px;"></div>
                 </div>
             </div>
+
+            <!-- PCA Insights Block -->
+            <div class="card shadow-sm border-0 mt-4 border-start border-4 border-info">
+                <div class="card-body">
+                    <h6 class="card-title"><i class="bi bi-lightbulb-fill text-warning me-2"></i>Biostatistical Interpretation</h6>
+                    <div id="pcaInsights" class="small"></div>
+                </div>
+            </div>
         </div>
 
         <!-- EFA Results -->
@@ -285,6 +293,14 @@
                     </table>
                 </div>
             </div>
+
+            <!-- EFA Insights Block -->
+            <div class="card shadow-sm border-0 mt-4 border-start border-4 border-info">
+                <div class="card-body">
+                    <h6 class="card-title"><i class="bi bi-lightbulb-fill text-warning me-2"></i>Biostatistical Interpretation</h6>
+                    <div id="efaInsights" class="small"></div>
+                </div>
+            </div>
         </div>
 
         <!-- CCA Results -->
@@ -321,6 +337,14 @@
                             <div id="ccaYCoefPlot" style="width:100%;height:320px;"></div>
                         </div>
                     </div>
+                </div>
+            </div>
+
+            <!-- CCA Insights Block -->
+            <div class="card shadow-sm border-0 mt-4 border-start border-4 border-info">
+                <div class="card-body">
+                    <h6 class="card-title"><i class="bi bi-lightbulb-fill text-warning me-2"></i>Biostatistical Interpretation</h6>
+                    <div id="ccaInsights" class="small"></div>
                 </div>
             </div>
         </div>
@@ -384,6 +408,14 @@
                             <tbody></tbody>
                         </table>
                     </div>
+                </div>
+            </div>
+
+            <!-- Cluster Insights Block -->
+            <div class="card shadow-sm border-0 mt-4 border-start border-4 border-info">
+                <div class="card-body">
+                    <h6 class="card-title"><i class="bi bi-lightbulb-fill text-warning me-2"></i>Biostatistical Interpretation</h6>
+                    <div id="clusterInsights" class="small"></div>
                 </div>
             </div>
         </div>
@@ -459,6 +491,15 @@
             </div>
         </div>
 
+        <!-- REGRESSION Insights Block -->
+            <div class="card shadow-sm border-0 mt-4 border-start border-4 border-info">
+                <div class="card-body">
+                    <h6 class="card-title"><i class="bi bi-lightbulb-fill text-warning me-2"></i>Biostatistical Interpretation</h6>
+                    <div id="regressionInsights" class="small"></div>
+                </div>
+            </div>
+        </div>
+
         <!-- MDS Results -->
         <div id="mdsResults" class="d-none">
             <div class="row g-4">
@@ -493,6 +534,14 @@
                     <div id="mdsScatter" style="width:100%;height:500px;"></div>
                 </div>
             </div>
+
+            <!-- MDS Insights Block -->
+            <div class="card shadow-sm border-0 mt-4 border-start border-4 border-info">
+                <div class="card-body">
+                    <h6 class="card-title"><i class="bi bi-lightbulb-fill text-warning me-2"></i>Biostatistical Interpretation</h6>
+                    <div id="mdsInsights" class="small"></div>
+                </div>
+            </div>
         </div>
 
     </section>
@@ -509,6 +558,27 @@
             // ── Method result cache ──────────────────────────────────────────
             // Stores { config: {...}, data: {...} } per method key
             const methodCache = {};
+
+            // ── Variable Name Prettifier (must be before render functions) ───
+            const varNameMap = {
+                'steps': 'Daily Steps', 'goal_steps': 'Goal Steps',
+                'total_calories': 'Total Calories', 'active_calories': 'Active Calories',
+                'distance_meters': 'Distance (m)', 'sleep_score': 'Sleep Score',
+                'total_sleep_secs': 'Total Sleep', 'deep_sleep_secs': 'Deep Sleep',
+                'light_sleep_secs': 'Light Sleep', 'rem_sleep_secs': 'REM Sleep',
+                'awake_secs': 'Awake Time', 'resting_hr': 'Resting Heart Rate',
+                'bb_change': 'Body Battery Δ', 'avg_respiration': 'Avg Respiration',
+                'lowest_spo2': 'Lowest SpO₂', 'activity_duration_secs': 'Activity Duration',
+                'activity_distance_m': 'Activity Distance',
+            };
+            function pretty(v) { return varNameMap[v] || v.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase()); }
+            function insightList(items) {
+                return '<ul class="mb-0 mt-2">' + items.map(i => `<li>${i}</li>`).join('') + '</ul>';
+            }
+            function insightSection(title, items) {
+                if (!items || items.length === 0) return '';
+                return `<div class="mb-3"><strong class="text-primary">${title}</strong>${insightList(items)}</div>`;
+            }
 
             // ── Compositional variable groups ────────────────────────────────
             // When a target belongs to a group, its sibling components should
@@ -1179,6 +1249,9 @@
             }, { responsive: true }
             );
             }
+
+            // Generate insights
+            generatePcaInsights(data);
             }
 
             // ══════════════════════════════════════════════════════════════════
@@ -1234,6 +1307,9 @@
             <td>${c.uniqueness.toFixed(3)}</td></tr>`;
             }
             }
+
+            // Generate insights
+            generateEfaInsights(data);
             }
 
             // ══════════════════════════════════════════════════════════════════
@@ -1257,6 +1333,9 @@
             // Coefficient bar charts
             plotCoefficients('ccaXCoefPlot', data.xCoefficients, 'Set 1');
             plotCoefficients('ccaYCoefPlot', data.yCoefficients, 'Set 2');
+
+            // Generate insights
+            generateCcaInsights(data);
             }
 
             function plotCoefficients(divId, coefficients, label) {
@@ -1391,6 +1470,9 @@
                         + '</tr>';
                 }
             }
+
+            // Generate insights
+            generateClusterInsights(data);
             }
 
             // ══════════════════════════════════════════════════════════════════
@@ -1483,6 +1565,9 @@
                     margin: { t: 20 },
                 }, { responsive: true });
             }
+
+            // Generate insights
+            generateRegressionInsights(data);
             }
 
             // ══════════════════════════════════════════════════════════════════
@@ -1541,6 +1626,392 @@
                     }, { responsive: true });
                 }
             }
+
+            // Generate insights
+            generateMdsInsights(data);
+            }
+
+            // ══════════════════════════════════════════════════════════════════
+            // BIOSTATISTICAL INSIGHT ENGINE
+            // Generates dynamic interpretation text based on R output values.
+            // Follows the academic rigor of MSc Statistics Lab interpretation
+            // patterns (Kaiser's rule, KMO ranges, Kruskal stress, etc.)
+            // (varNameMap, pretty, insightList, insightSection are declared at
+            //  the top of the script to avoid temporal dead-zone errors.)
+            // ══════════════════════════════════════════════════════════════════
+
+            // ══════════════════════════════════════════════════════════════════
+            // PCA Insights
+            // ══════════════════════════════════════════════════════════════════
+            function generatePcaInsights(data) {
+                const el = document.getElementById('pcaInsights');
+                if (!data.components || data.components.length === 0) { el.innerHTML = '<em>Insufficient data for interpretation.</em>'; return; }
+
+                const items = [];
+                const retained = data.components.filter(c => c.eigenvalue >= 1);
+                const totalCum = retained.length > 0 ? retained[retained.length - 1].cumulativePct : 0;
+
+                // 1. Kaiser rule + scree assessment
+                items.push(`<strong>Dimensionality:</strong> By Kaiser's criterion (eigenvalue > 1), <strong>${retained.length}</strong> of ${data.components.length} components should be retained, explaining <strong>${totalCum.toFixed(1)}%</strong> of total variance.`);
+
+                if (totalCum >= 90) items.push('This is an <span class="badge bg-success">excellent</span> reduction — very little information is lost. Your health metrics can be effectively summarised by these few latent dimensions.');
+                else if (totalCum >= 80) items.push('This is a <span class="badge bg-success">good</span> reduction. The retained components capture the dominant patterns in your daily health variability.');
+                else if (totalCum >= 70) items.push('This is <span class="badge bg-warning text-dark">adequate</span> but some variability is unexplained. Consider retaining an additional component or adding more diverse variables.');
+                else items.push('The retained components explain <span class="badge bg-danger">less than 70%</span> of your data — a substantial amount of daily health variation is being lost. This may indicate your metrics are highly heterogeneous or the dataset needs more observations.');
+
+                // 2. First component interpretation
+                const pc1 = data.components[0];
+                items.push(`<strong>PC1</strong> alone captures ${pc1.variancePct.toFixed(1)}% of variance — this is the single most important axis of variation in your health data.`);
+
+                // 3. Loading interpretation for PC1 + PC2
+                if (data.loadings && data.loadings.length > 0) {
+                    const pcCols = Object.keys(data.loadings[0]).filter(k => k.startsWith('PC'));
+                    for (let pcIdx = 0; pcIdx < Math.min(2, pcCols.length); pcIdx++) {
+                        const pc = pcCols[pcIdx];
+                        const loadingSorted = data.loadings
+                            .map(l => ({ var: l.variable, val: l[pc] || 0 }))
+                            .sort((a, b) => Math.abs(b.val) - Math.abs(a.val));
+                        const strong = loadingSorted.filter(l => Math.abs(l.val) >= 0.5);
+                        if (strong.length > 0) {
+                            const posVars = strong.filter(l => l.val > 0).map(l => pretty(l.var));
+                            const negVars = strong.filter(l => l.val < 0).map(l => pretty(l.var));
+                            let desc = `<strong>${pc}</strong> is primarily driven by `;
+                            if (posVars.length > 0 && negVars.length > 0) {
+                                desc += `<em>${posVars.join(', ')}</em> (positive) vs <em>${negVars.join(', ')}</em> (negative). This axis represents a <strong>trade-off</strong> — days high on one end tend to be low on the other.`;
+                            } else {
+                                desc += `<em>${strong.map(l => pretty(l.var)).join(', ')}</em> (|loading| ≥ 0.5). These variables move together as a coherent physiological dimension.`;
+                            }
+                            items.push(desc);
+                        }
+                    }
+                }
+
+                // 4. Athletic context
+                items.push('<strong>Training implication:</strong> The PCA scatter groups similar days together. Days clustered tightly had similar physiological profiles; outliers may indicate unusual training loads, poor recovery, or rest days. Use this to identify your body\'s dominant training–recovery patterns.');
+
+                el.innerHTML = insightSection('Dimensionality & Variance', items.slice(0, 3))
+                             + insightSection('Component Interpretation', items.slice(3, items.length - 1))
+                             + insightSection('Actionable Insight', [items[items.length - 1]]);
+            }
+
+            // ══════════════════════════════════════════════════════════════════
+            // EFA Insights
+            // ══════════════════════════════════════════════════════════════════
+            function generateEfaInsights(data) {
+                const el = document.getElementById('efaInsights');
+                const items = [];
+
+                // 1. Bartlett's test
+                if (data.bartlettPValue != null) {
+                    if (data.bartlettPValue < 0.05) {
+                        items.push(`<strong>Bartlett's test:</strong> χ² = ${data.bartlettChiSq?.toFixed(1)}, p = ${data.bartlettPValue.toExponential(2)} — the correlation matrix differs significantly from the identity matrix (p < 0.05). <span class="badge bg-success">Factor analysis is meaningful.</span>`);
+                    } else {
+                        items.push(`<strong>Bartlett's test:</strong> p = ${data.bartlettPValue.toFixed(4)} — the correlation matrix does <strong>not</strong> differ significantly from identity. <span class="badge bg-danger">Factor analysis is not recommended</span> — your variables may be largely uncorrelated.`);
+                    }
+                }
+
+                // 2. KMO
+                if (data.kmoOverall != null) {
+                    const kmo = data.kmoOverall;
+                    let kmoLabel, kmoClass;
+                    if (kmo >= 0.9)      { kmoLabel = 'Very Good'; kmoClass = 'bg-success'; }
+                    else if (kmo >= 0.8) { kmoLabel = 'Good'; kmoClass = 'bg-success'; }
+                    else if (kmo >= 0.7) { kmoLabel = 'Medium'; kmoClass = 'bg-info'; }
+                    else if (kmo >= 0.6) { kmoLabel = 'Acceptable'; kmoClass = 'bg-warning text-dark'; }
+                    else if (kmo >= 0.5) { kmoLabel = 'Poor'; kmoClass = 'bg-warning text-dark'; }
+                    else                 { kmoLabel = 'Unsuitable'; kmoClass = 'bg-danger'; }
+                    items.push(`<strong>KMO = ${kmo.toFixed(3)}</strong> — <span class="badge ${kmoClass}">${kmoLabel}</span> sampling adequacy for factor analysis. ${kmo < 0.5 ? 'The dataset is not suitable for factor analysis — variables lack sufficient shared variance.' : 'The shared variance among variables is sufficient to extract meaningful latent factors.'}`);
+                }
+
+                // 3. Factor interpretation
+                if (data.factors && data.factors.length > 0) {
+                    const totalVar = data.factors.reduce((s, f) => s + f.variancePct, 0);
+                    items.push(`<strong>${data.factors.length} factors</strong> explain a cumulative <strong>${totalVar.toFixed(1)}%</strong> of variance. ${totalVar >= 80 ? 'This is a strong factor solution — most variation is captured.' : totalVar >= 60 ? 'This is an adequate solution, though some variance remains unexplained.' : 'This is a weak solution — consider adjusting the number of factors or including different variables.'}`);
+                }
+
+                // 4. Loading-based factor naming
+                if (data.loadings && data.loadings.length > 0) {
+                    const factCols = Object.keys(data.loadings[0]).filter(k => k !== 'variable');
+                    for (let fi = 0; fi < Math.min(factCols.length, 4); fi++) {
+                        const fc = factCols[fi];
+                        const dominated = data.loadings
+                            .map(l => ({ var: l.variable, val: l[fc] || 0 }))
+                            .filter(l => Math.abs(l.val) >= 0.5)
+                            .sort((a, b) => Math.abs(b.val) - Math.abs(a.val));
+                        if (dominated.length > 0) {
+                            const varNames = dominated.map(l => pretty(l.var)).join(', ');
+                            // Domain-informed naming
+                            const varKeys = dominated.map(l => l.var);
+                            let factorLabel = '';
+                            if (varKeys.some(v => /sleep|rem|deep|light|awake/i.test(v))) factorLabel = ' (Sleep Architecture)';
+                            else if (varKeys.some(v => /steps|distance|calories/i.test(v))) factorLabel = ' (Physical Activity)';
+                            else if (varKeys.some(v => /hr|resting|bb_change|battery|spo2|respiration/i.test(v))) factorLabel = ' (Recovery & Vitals)';
+                            items.push(`<strong>${fc}${factorLabel}:</strong> loaded by ${varNames}. ${factorLabel ? 'This latent factor likely represents the ' + factorLabel.replace(/[() ]/g, '').toLowerCase() + ' dimension of your health.' : ''}`);
+                        }
+                    }
+                }
+
+                // 5. Communality check
+                if (data.communalities) {
+                    const poorVars = data.communalities.filter(c => c.communality < 0.3);
+                    if (poorVars.length > 0) {
+                        items.push(`<strong>Poorly explained variables:</strong> ${poorVars.map(c => pretty(c.variable) + ' (h²=' + c.communality.toFixed(2) + ')').join(', ')} have low communalities (< 0.3). These variables are not well represented by the factor model and may be measuring something independent.`);
+                    }
+                    const goodVars = data.communalities.filter(c => c.communality >= 0.7);
+                    if (goodVars.length > 0) {
+                        items.push(`<strong>Well-explained variables:</strong> ${goodVars.map(c => pretty(c.variable) + ' (h²=' + c.communality.toFixed(2) + ')').join(', ')} are strongly captured by the factor model.`);
+                    }
+                }
+
+                el.innerHTML = insightSection('Suitability Assessment', items.slice(0, 2))
+                             + insightSection('Factor Structure', items.filter((_, i) => i >= 2 && i < items.length - 1))
+                             + (items.length > 2 ? insightSection('Variable Quality', items.slice(-2)) : '');
+            }
+
+            // ══════════════════════════════════════════════════════════════════
+            // CCA Insights
+            // ══════════════════════════════════════════════════════════════════
+            function generateCcaInsights(data) {
+                const el = document.getElementById('ccaInsights');
+                const items = [];
+
+                if (!data.dimensions || data.dimensions.length === 0) { el.innerHTML = '<em>No canonical dimensions to interpret.</em>'; return; }
+
+                // 1. Set description
+                const set1 = (data.set1Variables || []).map(pretty).join(', ');
+                const set2 = (data.set2Variables || []).map(pretty).join(', ');
+                items.push(`<strong>Variable sets:</strong> Set 1 (${set1}) vs Set 2 (${set2}). CCA finds the linear combinations of each set that are maximally correlated.`);
+
+                // 2. Canonical correlations assessment
+                const sigDims = data.dimensions.filter(d => d.canonicalCorr >= 0.3);
+                const r1 = data.dimensions[0];
+                items.push(`<strong>First canonical correlation:</strong> ρ₁ = ${r1.canonicalCorr.toFixed(4)} (ρ₁² = ${r1.canonicalCorrSq.toFixed(4)}). This means the best linear combination of Set 1 shares <strong>${(r1.canonicalCorrSq * 100).toFixed(1)}%</strong> of its variance with the best linear combination of Set 2.`);
+
+                if (r1.canonicalCorr >= 0.7) {
+                    items.push('<span class="badge bg-success">Strong</span> canonical correlation — there is a substantial linear relationship between the two variable sets. The physiological domains they represent are meaningfully coupled.');
+                } else if (r1.canonicalCorr >= 0.4) {
+                    items.push('<span class="badge bg-info">Moderate</span> canonical correlation — a meaningful but not dominant relationship exists between the variable sets. Some shared physiological processes link them.');
+                } else {
+                    items.push('<span class="badge bg-warning text-dark">Weak</span> canonical correlation — the two variable sets share little linear variance. They may represent largely independent physiological domains.');
+                }
+
+                // 3. Number of meaningful dimensions
+                items.push(`<strong>${sigDims.length}</strong> of ${data.dimensions.length} canonical dimensions have ρ ≥ 0.3, suggesting ${sigDims.length} meaningful shared dimension${sigDims.length !== 1 ? 's' : ''} between the sets.`);
+
+                // 4. Coefficient interpretation
+                if (data.xCoefficients && data.xCoefficients.length > 0) {
+                    const cols = Object.keys(data.xCoefficients[0]).filter(k => k !== 'variable');
+                    if (cols.length > 0) {
+                        const c1 = cols[0];
+                        const topX = data.xCoefficients.map(c => ({ var: c.variable, val: Math.abs(c[c1] || 0) })).sort((a, b) => b.val - a.val);
+                        const topY = (data.yCoefficients || []).map(c => ({ var: c.variable, val: Math.abs(c[c1] || 0) })).sort((a, b) => b.val - a.val);
+                        if (topX.length > 0 && topY.length > 0) {
+                            items.push(`<strong>First canonical variate:</strong> In Set 1, <em>${pretty(topX[0].var)}</em> has the strongest weight; in Set 2, <em>${pretty(topY[0].var)}</em> dominates. The primary cross-domain relationship is between these variables.`);
+                        }
+                    }
+                }
+
+                // 5. Athletic relevance
+                items.push('<strong>Training implication:</strong> Strong canonical correlations between activity and recovery sets indicate your training load is affecting recovery metrics in a systematic, predictable way. Weak correlations may mean recovery is driven by factors not captured here (e.g., nutrition, stress).');
+
+                el.innerHTML = insightSection('Cross-Domain Correlation', items.slice(0, 4))
+                             + insightSection('Canonical Structure', items.slice(4, items.length - 1))
+                             + insightSection('Actionable Insight', [items[items.length - 1]]);
+            }
+
+            // ══════════════════════════════════════════════════════════════════
+            // Cluster Insights
+            // ══════════════════════════════════════════════════════════════════
+            function generateClusterInsights(data) {
+                const el = document.getElementById('clusterInsights');
+                if (!data.clustering) { el.innerHTML = '<em>No clustering data.</em>'; return; }
+                const cl = data.clustering;
+                const items = [];
+
+                // 1. Hopkins test — clustering tendency
+                if (cl.hopkinsStatistic != null) {
+                    if (cl.clusteringTendency) {
+                        items.push(`<strong>Hopkins statistic:</strong> H = ${cl.hopkinsStatistic.toFixed(4)} — <span class="badge bg-success">clustering tendency confirmed</span>. The data is not randomly distributed; natural groupings exist in your health patterns.`);
+                    } else {
+                        items.push(`<strong>Hopkins statistic:</strong> H = ${cl.hopkinsStatistic.toFixed(4)} — <span class="badge bg-warning text-dark">weak clustering tendency</span>. The data may be close to uniformly distributed. Clusters found may be artificial rather than natural groupings.`);
+                    }
+                }
+
+                // 2. Silhouette quality
+                const silAvg = cl.silhouetteAvg;
+                if (silAvg != null) {
+                    let silLabel, silClass;
+                    if (silAvg >= 0.7)      { silLabel = 'strong structure'; silClass = 'bg-success'; }
+                    else if (silAvg >= 0.5) { silLabel = 'reasonable structure'; silClass = 'bg-info'; }
+                    else if (silAvg >= 0.25) { silLabel = 'weak structure'; silClass = 'bg-warning text-dark'; }
+                    else                     { silLabel = 'no substantial structure'; silClass = 'bg-danger'; }
+                    items.push(`<strong>Mean silhouette:</strong> ${silAvg.toFixed(4)} — <span class="badge ${silClass}">${silLabel}</span>. ${silAvg >= 0.5 ? 'The clusters are well-separated; your days fall into distinct physiological profiles.' : 'Cluster boundaries are fuzzy — some days could plausibly belong to more than one group.'}`);
+                }
+
+                // 3. BSS/TSS ratio
+                if (cl.totalSS > 0) {
+                    const bssRatio = (cl.betweenSS / cl.totalSS * 100);
+                    items.push(`<strong>Between / Total SS:</strong> ${bssRatio.toFixed(1)}% — ${bssRatio >= 60 ? 'clusters explain most of the variance; the K-means partition is effective.' : bssRatio >= 40 ? 'moderate separation between clusters.' : 'clusters overlap substantially; consider a different K or different variables.'}`);
+                }
+
+                // 4. Cluster profiling via centroids
+                if (cl.clusterCenters && cl.clusterCenters.length > 0) {
+                    const featureCols = Object.keys(cl.clusterCenters[0]).filter(k => k !== 'cluster');
+                    for (const center of cl.clusterCenters) {
+                        const vals = featureCols.map(f => ({ var: f, val: typeof center[f] === 'number' ? center[f] : 0 }));
+                        const hiVars = vals.filter(v => v.val > 0.5).sort((a, b) => b.val - a.val).slice(0, 3);
+                        const loVars = vals.filter(v => v.val < -0.5).sort((a, b) => a.val - b.val).slice(0, 3);
+
+                        let label = `<strong>Cluster ${center.cluster}`;
+                        if (cl.clusterSizes) label += ` (${cl.clusterSizes[center.cluster - 1]} days)`;
+                        label += ':</strong> ';
+
+                        if (hiVars.length > 0) label += `High in ${hiVars.map(v => pretty(v.var)).join(', ')}. `;
+                        if (loVars.length > 0) label += `Low in ${loVars.map(v => pretty(v.var)).join(', ')}. `;
+
+                        // Domain profiling
+                        const hiKeys = hiVars.map(v => v.var);
+                        const loKeys = loVars.map(v => v.var);
+                        if (hiKeys.some(k => /steps|distance|calories/i.test(k)) && loKeys.some(k => /sleep|rem|deep/i.test(k)))
+                            label += 'Profile: <em>High-volume training days with reduced sleep.</em>';
+                        else if (hiKeys.some(k => /sleep|rem|deep|bb_change/i.test(k)) && loKeys.some(k => /steps|distance|calories/i.test(k)))
+                            label += 'Profile: <em>Recovery-focused rest days.</em>';
+                        else if (hiKeys.some(k => /steps|distance/i.test(k)) && hiKeys.some(k => /sleep|bb_change/i.test(k)))
+                            label += 'Profile: <em>Balanced days — adequate activity and good recovery.</em>';
+
+                        items.push(label);
+                    }
+                }
+
+                // 5. Elbow assessment
+                if (cl.elbowWcss && cl.elbowWcss.length > 1) {
+                    items.push(`<strong>Elbow analysis:</strong> The WCSS curve shows how cluster compactness improves with K. The chosen K = ${cl.k} should correspond to the "elbow" — beyond this point, adding clusters yields diminishing returns. ${cl.k === 3 ? 'K=3 often captures a natural rest / moderate / high-intensity split in training data.' : ''}`);
+                }
+
+                el.innerHTML = insightSection('Clustering Validity', items.slice(0, 3))
+                             + insightSection('Cluster Profiles', items.filter((_, i) => i >= 3 && i < items.length - 1))
+                             + (items.length > 3 ? insightSection('Model Selection', [items[items.length - 1]]) : '');
+            }
+
+            // ══════════════════════════════════════════════════════════════════
+            // Regression Insights
+            // ══════════════════════════════════════════════════════════════════
+            function generateRegressionInsights(data) {
+                const el = document.getElementById('regressionInsights');
+                if (!data.regression) { el.innerHTML = '<em>No regression data.</em>'; return; }
+                const reg = data.regression;
+                const items = [];
+
+                // 1. Model fit
+                const r2 = reg.rSquared;
+                let fitLabel, fitClass;
+                if (r2 >= 0.99)      { fitLabel = 'Tautological'; fitClass = 'bg-danger'; }
+                else if (r2 >= 0.8) { fitLabel = 'Strong'; fitClass = 'bg-success'; }
+                else if (r2 >= 0.5) { fitLabel = 'Moderate'; fitClass = 'bg-info'; }
+                else if (r2 >= 0.3) { fitLabel = 'Weak'; fitClass = 'bg-warning text-dark'; }
+                else                 { fitLabel = 'Very Weak'; fitClass = 'bg-danger'; }
+
+                items.push(`<strong>R² = ${r2.toFixed(4)}, Adjusted R² = ${reg.adjustedRSquared.toFixed(4)}</strong> — <span class="badge ${fitClass}">${fitLabel} fit</span>. The predictors collectively explain <strong>${(r2 * 100).toFixed(1)}%</strong> of the variance in ${pretty(reg.targetVariable)}.`);
+
+                if (r2 >= 0.99) {
+                    items.push('<span class="text-danger fw-bold">⚠ Near-perfect R² strongly suggests a tautological model</span> — the target is likely a mathematical function of the predictors (e.g., TotalSleep ≈ DeepSleep + LightSleep + RemSleep). This is an algebraic identity, not a meaningful statistical finding. Remove component variables or choose a different target.');
+                } else {
+                    const gap = r2 - reg.adjustedRSquared;
+                    if (gap > 0.05) items.push(`The gap between R² and Adjusted R² (${gap.toFixed(3)}) suggests some overfitting — you may have too many predictors relative to observations. Consider removing insignificant variables.`);
+                }
+
+                // 2. F-test
+                if (reg.fPValue != null) {
+                    if (reg.fPValue < 0.05) {
+                        items.push(`<strong>F-statistic = ${reg.fStatistic.toFixed(2)}, p = ${reg.fPValue < 0.001 ? reg.fPValue.toExponential(2) : reg.fPValue.toFixed(4)}</strong> — the overall model is <span class="badge bg-success">statistically significant</span>. At least one predictor has a non-zero relationship with ${pretty(reg.targetVariable)}.`);
+                    } else {
+                        items.push(`<strong>F-test p = ${reg.fPValue.toFixed(4)}</strong> — the model is <span class="badge bg-danger">not significant</span>. The predictors collectively do not explain ${pretty(reg.targetVariable)} better than a simple mean.`);
+                    }
+                }
+
+                // 3. Coefficient interpretation
+                if (reg.coefficients) {
+                    const sigCoefs = reg.coefficients.filter(c => c.variable !== '(Intercept)' && c.pValue < 0.05);
+                    const insigCoefs = reg.coefficients.filter(c => c.variable !== '(Intercept)' && c.pValue >= 0.05);
+
+                    if (sigCoefs.length > 0) {
+                        for (const c of sigCoefs.sort((a, b) => Math.abs(b.estimate) - Math.abs(a.estimate)).slice(0, 5)) {
+                            const dir = c.estimate > 0 ? 'increases' : 'decreases';
+                            items.push(`<strong>${pretty(c.variable)}</strong> (β = ${c.estimate.toFixed(4)}, p = ${c.pValue < 0.001 ? c.pValue.toExponential(2) : c.pValue.toFixed(4)}): Each unit increase in ${pretty(c.variable)} is associated with a ${Math.abs(c.estimate).toFixed(2)}-unit ${dir} in ${pretty(reg.targetVariable)}, holding other predictors constant.`);
+                        }
+                    }
+                    if (insigCoefs.length > 0) {
+                        items.push(`<strong>Non-significant predictors:</strong> ${insigCoefs.map(c => pretty(c.variable)).join(', ')} (p ≥ 0.05) — these do not contribute significantly to the model. Consider removing them for a more parsimonious fit.`);
+                    }
+                }
+
+                // 4. Residual normality
+                if (reg.shapiroPValue != null) {
+                    if (reg.residualsNormal) {
+                        items.push(`<strong>Shapiro-Wilk p = ${reg.shapiroPValue.toFixed(4)}</strong> — residuals are <span class="badge bg-success">approximately normal</span> (p > 0.05). The inference assumptions (confidence intervals, p-values) are reliable.`);
+                    } else {
+                        items.push(`<strong>Shapiro-Wilk p = ${reg.shapiroPValue.toFixed(4)}</strong> — residuals are <span class="badge bg-warning text-dark">not normal</span> (p ≤ 0.05). Coefficient p-values should be interpreted with caution. Consider a Box-Cox transformation or robust regression.`);
+                    }
+                }
+
+                // 5. Athletic relevance
+                if (r2 < 0.99 && reg.coefficients) {
+                    const topSig = reg.coefficients.filter(c => c.variable !== '(Intercept)' && c.pValue < 0.05).sort((a, b) => Math.abs(b.estimate) - Math.abs(a.estimate))[0];
+                    if (topSig) {
+                        items.push(`<strong>Training implication:</strong> ${pretty(topSig.variable)} is the strongest predictor of ${pretty(reg.targetVariable)}. ${topSig.estimate > 0 ? 'Increasing' : 'Decreasing'} it tends to ${topSig.estimate > 0 ? 'improve' : 'reduce'} your ${pretty(reg.targetVariable)}. This relationship is independent of the other variables in the model.`);
+                    }
+                }
+
+                el.innerHTML = insightSection('Model Assessment', items.slice(0, 3))
+                             + insightSection('Key Predictors', items.filter((_, i) => i >= 3 && i < items.length - 2))
+                             + insightSection('Diagnostic & Actionable', items.slice(-2));
+            }
+
+            // ══════════════════════════════════════════════════════════════════
+            // MDS Insights
+            // ══════════════════════════════════════════════════════════════════
+            function generateMdsInsights(data) {
+                const el = document.getElementById('mdsInsights');
+                if (!data.mds) { el.innerHTML = '<em>No MDS data.</em>'; return; }
+                const mds = data.mds;
+                const items = [];
+
+                // 1. Stress interpretation (Kruskal)
+                let stressLabel, stressClass;
+                if (mds.stress <= 0.025)      { stressLabel = 'Perfect'; stressClass = 'bg-success'; }
+                else if (mds.stress <= 0.05) { stressLabel = 'Excellent'; stressClass = 'bg-success'; }
+                else if (mds.stress <= 0.1)  { stressLabel = 'Good'; stressClass = 'bg-info'; }
+                else if (mds.stress <= 0.2)  { stressLabel = 'Fair'; stressClass = 'bg-warning text-dark'; }
+                else                          { stressLabel = 'Poor'; stressClass = 'bg-danger'; }
+
+                items.push(`<strong>Kruskal stress = ${mds.stress.toFixed(4)}</strong> — <span class="badge ${stressClass}">${stressLabel}</span> fit. ${mds.stress <= 0.1 ? 'The low-dimensional map faithfully preserves the between-day distances from the original high-dimensional health data.' : mds.stress <= 0.2 ? 'The map is a reasonable approximation of the real distances, but some distortion exists.' : 'Substantial distortion — the 2D/3D projection is not reliably representing true day-to-day similarity. Consider using more dimensions.'}`);
+
+                // 2. Goodness of Fit
+                const gofPct = (mds.goF * 100).toFixed(1);
+                items.push(`<strong>Goodness of Fit = ${gofPct}%</strong> — ${mds.goF >= 0.8 ? 'the retained dimensions capture most of the distance information. The map is trustworthy.' : mds.goF >= 0.6 ? 'adequate representation, though some distance relationships are lost in the projection.' : 'substantial information loss in the dimensional reduction. Interpret spatial relationships with caution.'}`);
+
+                // 3. Eigenvalue decay
+                if (mds.eigenvalues && mds.eigenvalues.length > 0) {
+                    const posEig = mds.eigenvalues.filter(e => e > 0);
+                    const totalEig = posEig.reduce((s, e) => s + e, 0);
+                    const dimExplained = posEig.slice(0, mds.dimensions).reduce((s, e) => s + e, 0) / totalEig * 100;
+                    items.push(`<strong>Eigenvalue concentration:</strong> The first ${mds.dimensions} dimensions capture ${dimExplained.toFixed(1)}% of the positive eigenvalue mass. ${dimExplained >= 80 ? 'Excellent — the chosen dimensionality is sufficient.' : 'Consider adding a dimension for better reconstruction fidelity.'}`);
+
+                    const negCount = mds.eigenvalues.filter(e => e < 0).length;
+                    if (negCount > 0) {
+                        items.push(`<strong>Negative eigenvalues detected (${negCount}):</strong> The distance matrix is not perfectly Euclidean. This is common with health data that mixes different scales (seconds, steps, heart rate). The classical MDS solution remains valid but these dimensions are discarded.`);
+                    }
+                }
+
+                // 4. Map interpretation
+                items.push('<strong>Reading the map:</strong> Each point represents one day. Days close together had <em>similar</em> overall health profiles; distant days were physiologically different. Look for: (1) tight clusters of similar day-types, (2) outlier days far from the main mass — these may be unusually intense training days or illness/rest days, (3) temporal patterns — do recent days cluster differently from older ones?');
+
+                // 5. Athletic context
+                items.push('<strong>Training implication:</strong> If your recent days are drifting away from your historical cluster, your training load or recovery pattern may be changing. A tight cluster means consistency; a scattered pattern suggests high day-to-day variability in your health metrics.');
+
+                el.innerHTML = insightSection('Reconstruction Quality', items.slice(0, 3))
+                             + insightSection('Dimensional Assessment', items.slice(3, items.length - 1))
+                             + insightSection('Actionable Insight', [items[items.length - 1]]);
             }
 
             // ══════════════════════════════════════════════════════════════════
