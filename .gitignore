@@ -63,6 +63,9 @@ swim_fetch.json
 __pycache__/
 *.pyc
 
+# R project (personal academic data – not for distribution)
+Rproject_statistics_example/
+
 # Machine-specific development settings
 GarminTempApi/appsettings.Development.json
 

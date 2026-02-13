@@ -1,0 +1,662 @@
+---
+title: "Statistics for Data Science - Laboratory Project"
+author: "Camilo Julian Berutti"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    code-summary: "Show code"
+    theme: cosmo
+editor: visual
+engine: knitr
+---
+
+```{r}
+.libPaths("./library")
+#install.packages("MVN")
+#install.packages("lubridate")
+#install.packages("tidyverse")
+#install.packages("dplyr")
+#install.packages("ggfortify")
+#install.packages("corrplot")
+#install.packages("psych")
+#install.packages("ggplot2")
+#install.packages("GGally"")
+#install.packages("reshape2")
+```
+
+```{r}
+#| message: false
+#| warning: false
+#| error: false
+library(GGally)
+library(ggplot2)
+library(dplyr)
+library(tidyr)
+library(rlang)
+library(readr)
+library(MVN)
+library(scales)
+library(ggfortify)
+library(ggrepel)
+library(corrplot)
+library(scatterplot3d)
+library(caret)
+library(cluster)
+library(hopkins)
+library("readr")
+library(factoextra)
+```
+
+```{r}
+load("Project_data.RData")
+data
+```
+
+## About the Dataset
+
+The dataset analyzed in this project originates from **Garmin Connect** exports and was processed with a custom Python extractor. The dataset consists in three CSV files combining information on **daily wellness measurements** (steps, heart rate, sleep, body battery, stress) and **physical activities** (running, swimming, etc.).
+
+# Summary Analysis
+
+```{r}
+numeric_vars <- sapply(data, is.numeric)
+numeric_col_names <- names(data)[numeric_vars]
+
+results_list <- list()
+
+normality_table <- data.frame(
+  variable = character(),
+  p_value = numeric(),
+  normality = character(),
+  stringsAsFactors = FALSE
+)
+
+for (col_name in numeric_col_names) {
+  variable_data <- na.omit(data[[col_name]])
+
+    cat("\n--- Plots for:", col_name, "---\n")
+    op <- par(no.readonly = TRUE)
+    par(mfrow = c(1, 2), mar = c(4, 4, 3, 1))
+
+    hist(variable_data,
+         main = paste("\nHistogram of", col_name),
+         xlab = col_name)
+
+    boxplot(variable_data,
+            main = paste("\nBoxplot of", col_name),
+            ylab = col_name)
+    
+    par(op)
+
+    shapiro_test <- shapiro.test(variable_data)
+    
+    pval <- shapiro_test$p.value
+
+    normality_result <- ifelse(pval < 0.05, "Non-normal", "Normal")
+    
+    cat("Shapiro-Wilk test for", col_name, "- p-value:",
+        round(pval, 4), "\n")
+    cat("Result:", normality_result, "\n")
+
+    results_list[[col_name]] <- list(
+      n = length(variable_data),
+      mean = mean(variable_data),
+      sd = sd(variable_data),
+      p_value = pval,
+      normality = normality_result
+    )
+
+    normality_table <- rbind(
+      normality_table,
+      data.frame(
+        variable = col_name,
+        p_value = pval,
+        normality = normality_result,
+        stringsAsFactors = FALSE
+      )
+    )
+  }
+
+  if (nrow(normality_table) > 0) {
+    cat("\n\n================ NORMALITY SUMMARY TABLE ================\n")
+    print(normality_table, row.names = FALSE)
+    cat("==========================================================\n")
+  }
+
+  invisible(list(
+    summary_table = normality_table,
+    variable_summaries = results_list
+  ))
+```
+
+### Curiosity bonus - period segmentation
+
+```{r}
+normality_segmented = read.csv("normality_results.csv") #created in Berutti_Project.Rmd
+```
+
+## Correlation
+
+As the data is not normal, we can´t use Pearson method, we use Spearman :
+
+```{r}
+data_clean <- data
+
+exclude_cols <- c("day", "activity_status", "had_real_activity", "start", "end")
+
+numeric_for_corr <- data_clean %>%
+  dplyr::select(where(is.numeric)) %>%
+  dplyr::select(-any_of(exclude_cols))
+
+corr_matrix <- cor(numeric_for_corr, use = "pairwise.complete.obs")
+
+corrplot(corr_matrix, cor_method = "spearman", method = "color", tl.cex = 0.6, order = "hclust") 
+```
+
+# Principal Component Analysis
+
+We have a lot of variables, therefore it could be useful to analyze if we can find a new reference system (via a linear combination of the original variables) that allow us to explain the variance of the data.
+
+```{r}
+data_clean_complete <- na.omit(data_clean) 
+original_rows <- nrow(data_clean)
+cleaned_rows <- nrow(data_clean_complete)
+cat("Removed", original_rows - cleaned_rows, "rows containing NA values.\n")
+col_remov_number = c(1,17,18,19,20)
+set.seed(123)
+
+
+#data_clean_complete <- data_clean IT affect the results
+
+train_index <- createDataPartition(data_clean_complete$had_real_activity, p = 0.7, list = FALSE)
+train_data <- data_clean_complete[train_index, ]
+test_data  <- data_clean_complete[-train_index, ]
+
+train_scaled <- scale(train_data[,-col_remov_number])
+test_scaled  <- scale(test_data[,-col_remov_number], center = attr(train_scaled, "scaled:center"),
+scale = attr(train_scaled, "scaled:scale"))
+
+pca <- prcomp(train_scaled, center = T, scale. = T)
+
+
+```
+
+We have a $\boldsymbol{X} = (X_1, X_2, \dots, X_p)^\top$: $p$-dimensional random vector (variable train_scaled) with mean vector $\boldsymbol{\mu}$ and positive definite covariance matrix $\boldsymbol{\Sigma}$. Elements are usually correlated.
+
+By using PCA we replace $\boldsymbol{X}$ by a vector $\boldsymbol{Y} = (Y_1, Y_2, \dots, Y_p)^\top$ called **principal component (PC) vector of** $\boldsymbol{X}$ such that the components $Y_j$ are uncorrelated linear combinations of $X_1, X_2, \dots, X_p$.
+
+```{r}
+summary(pca)$importance[, 1:6]
+```
+
+```{r}
+pca$rotation[,1:3]
+```
+
+```{r}
+loadings_matrix <- pca$rotation[, 1:3]
+threshold <- 0.3
+loadings_relevant <- apply(loadings_matrix, 2, function(x) {
+  x[abs(x) < threshold] <- NA
+  return(x)
+})
+
+loadings_relevant
+```
+
+We can see that the components can describe
+
+**PC1: Recovery vs. Stress:**
+
+-   **High score:** Represents a day with good sleep quality.
+
+-   **High negative score:** Represents a day with **high stress**.
+
+**PC2: High intensity and caloric burn:**
+
+-   **High negative score:** Since the loadings are negative, a *low* (more negative) score on PC2 actually means **high activity**. It represents a day with a hard workout (vigorous activity), high heart rate, and massive calorie burn.
+
+-   **Low negative score:** Would represent a sedentary day with low caloric expenditure.
+
+**PC3: Low vs. high intensity exercise:**
+
+This component differentiate between general daily movement (walking) and specific sport exposure.
+
+-   **High negative score:** Represents a day defined by **volume and walking**. You hit a high step count and recharged your battery (perhaps a low-stress, active recovery walking day).
+
+-   **High positive score:** Represents a day defined by **specific sports** or moderate activity that might not be step-heavy (like cycling, swimming, or weight training) captured by `sport_exposure`.
+
+```{r}
+p_biplot <- autoplot(pca,loadings = TRUE,loadings.colour = "red",loadings.label = TRUE,loadings.label.repel = TRUE,loadings.label.size = 3,loadings.label.color = "red",alpha = 0.4,size = 0.8)
+plot(p_biplot)
+```
+
+```{r}
+library(plotly)
+
+scale_factor <- 5 
+
+scores_data <- as.data.frame(pca$x[, 1:3])
+scores_data$Observation <- 1:nrow(scores_data)
+
+loadings_data <- as.data.frame(pca$rotation[, 1:3])
+loadings_data$Variable <- rownames(loadings_data)
+
+loadings_scaled <- loadings_data
+loadings_scaled[, 1:3] <- loadings_data[, 1:3] * scale_factor
+
+
+p <- plot_ly()
+
+p <- add_trace(p, 
+               data = scores_data, 
+               x = ~PC1, y = ~PC2, z = ~PC3,
+               type = "scatter3d", 
+               mode = "markers",
+               marker = list(size = 3, opacity = 0.5, color = 'blue'),
+               text = ~paste("Obs:", Observation),
+               name = "Observations",
+               inherit = FALSE) 
+
+
+p <- add_text(p, 
+              data = loadings_scaled,
+              x = ~PC1, y = ~PC2, z = ~PC3,
+              text = ~Variable,
+              textfont = list(color = 'red', size = 10),
+              name = "Variables",
+              inherit = FALSE) 
+
+for (i in 1:nrow(loadings_scaled)) {
+  p <- add_trace(p, 
+                 x = c(0, loadings_scaled$PC1[i]), 
+                 y = c(0, loadings_scaled$PC2[i]), 
+                 z = c(0, loadings_scaled$PC3[i]), 
+                 type = "scatter3d",
+                 mode = "lines",
+                 line = list(color = 'red', width = 3),
+                 showlegend = FALSE,
+                 hoverinfo = "none",
+                 inherit = FALSE) 
+}
+
+p <- p %>% layout(
+  title = "3D PCA Biplot",
+  scene = list(
+    xaxis = list(title = "PC1"),
+    yaxis = list(title = "PC2"),
+    zaxis = list(title = "PC3")
+  )
+)
+
+p
+
+
+
+```
+
+# Logistic Regression over PCA data
+
+We want to see if it is possible to classify between days with/without sport activities. We have the categorical variable had_real_activity, that has TRUE or FALSE as possible values.
+
+First I will spoil the use of the LR model, to find the optimal number of PC to consider, but I will show it in more detail later.
+
+```{r}
+train_pca_all <- as.data.frame(pca$x)
+test_pca_all  <- as.data.frame(predict(pca, newdata = test_scaled))
+
+acc_results <- data.frame(Components = integer(), Accuracy = numeric())
+
+max_components_to_consider <- 9
+
+for (k in 1:max_components_to_consider) {
+  
+  train_pca <- train_pca_all[, 1:k, drop = FALSE]
+  test_pca  <- test_pca_all[, 1:k, drop = FALSE]
+
+  train_pca$had_real_activity <- train_data$had_real_activity
+  test_pca$had_real_activity  <- test_data$had_real_activity
+
+  model <- glm(had_real_activity ~ ., data = train_pca, family = binomial)
+
+  test_pca$pred_prob <- predict(model, newdata = test_pca, type = "response")
+  test_pca$pred_class <- test_pca$pred_prob > 0.5
+
+  # You no longer need 'na.rm = TRUE' because there are no NAs
+  acc <- mean(test_pca$pred_class == test_pca$had_real_activity) 
+  acc_results <- rbind(acc_results, data.frame(Components = k, Accuracy = acc))
+}
+
+```
+
+```{r}
+ggplot(acc_results, aes(x = Components, y = Accuracy)) +
+  geom_point(color = "blue", size = 2) +
+  geom_line(color = "blue", alpha = 0.6) +
+  labs(
+    title = "Logistic regression accuracy\nas a function of #PCA components",
+    x = "Number of principal components",
+    y = "Accuracy (test set)"
+  ) +
+  theme_minimal(base_size = 14)
+```
+
+Logistic Regression:
+
+```{r}
+k= 3 # Number of components to keep
+
+train_pca <- train_pca_all[, 1:k, drop = FALSE] # THIS WILL BE MY DATA NOW
+test_pca  <- test_pca_all[, 1:k, drop = FALSE]
+
+train_pca$had_real_activity <- train_data$had_real_activity
+test_pca$had_real_activity  <- test_data$had_real_activity
+
+data_log_reg <- glm(had_real_activity ~ ., data = train_pca, family = binomial)
+```
+
+```{r}
+summary(data_log_reg) # PC1 recovery,PC2  high intensity,PC3  low intensity
+```
+
+We check if the dataset is balanced:
+
+```{r}
+table(train_pca$had_real_activity)
+```
+
+We see that the amount of values is similar for both classes. To know which is the reference class :
+
+```{r}
+contrasts(train_pca$had_real_activity)
+```
+
+Therefore FALSE is the reference class. (Non-active day)
+
+```{r}
+#train_pca
+train_pca$pred_prob <- predict(data_log_reg, newdata = train_pca, type = "response")
+train_pca$pred_class <- ifelse(train_pca$pred_prob > 0.5, "TRUE", "FALSE")
+
+conf_train <- table(Predicted = train_pca$pred_class, Actual = train_pca$had_real_activity)
+
+conf_train
+acc_train <- sum(diag(conf_train)) / sum(conf_train)
+cat("Training accuracy:", round(acc_train, 3), "\n\n")
+```
+
+Now we check the accuracy in the test set:
+
+```{r}
+test_pca$pred_prob <- predict(data_log_reg, newdata = test_pca, type = "response")
+test_pca$pred_class <- ifelse(test_pca$pred_prob > 0.5, "TRUE", "FALSE")
+conf_test <- table(Predicted = test_pca$pred_class, Actual = test_pca$had_real_activity)
+conf_test
+acc_test <- sum(diag(conf_test)) / sum(conf_test)
+cat("\nTest accuracy:", round(acc_test, 3), "\n")
+```
+
+For some mysterious reason the accuracy in the test set is greater than in the training. (with this dataset size misidentifying the class of one sample corresponds to ¬1.4% therefore it might be only by chance)
+
+------------------------------------------------------------------------
+
+# Exploratory Factor Analysis
+
+We have a p-dimensional vector $\mathbf{X} = (X_1 , X_2, ..., X_p)^T$ , with mean vector $\mathbf{\mu}$ and covariance matrix $\mathbf{\Sigma}$ . However, we have to be **careful with perfect correlated variables**, so I will remove the following variables:
+
+```{r}
+data_EFA_complete <- data %>%
+  dplyr::select(
+    -total_sleep_secs,  
+    -distance,          
+    -calories_total,
+    -had_real_activity,
+    -activity_status,
+    #-stress_avg,
+    #-steps,
+    #-calories_active
+    )
+data_EFA <- data_EFA_complete %>%
+    dplyr::select(where(is.numeric)) %>%
+    na.omit()
+```
+
+I will continue using the function fa(). because:
+
+-   factanal (default method is "mle" maximum likelihood estimation. we should only use it if we know that we have normal distribution)
+
+-   fa is non parametric, it is not assuming about normality so we can use it always
+
+**Checking suitability for EFA :**
+
+-   Barlett´s Test of Sphericity:
+
+```{r}
+n_total_rows <- nrow(data_EFA)
+cor_matrix <- cor(data_EFA)
+bartlett_result <- psych::cortest.bartlett(cor_matrix, n = n_total_rows)
+print(bartlett_result)
+```
+
+According to this test, as the p.value is 0 we can perform EFA.
+
+-   KMO Test:
+
+```{r}
+KMO_result <- psych::KMO(cor_matrix)
+overall_msa_value <- KMO_result$MSA
+cat(paste0("Overall MSA: ", round(overall_msa_value, 3)))
+```
+
+```{r}
+msa_table <- as.data.frame(KMO_result$MSAi)
+colnames(msa_table) <- "MSA"
+print(msa_table, digits = 3)
+```
+
+According to the KMO Tests, the data is **acceptable** (MSA $\approx$ 0.7) to do EFA.
+
+**How many factors should we choose?**
+
+```{r}
+fa_parallel_result <- psych::fa.parallel(data_EFA, 
+fm = "pa", #Principal Axis Factoring
+fa = "fa")    
+```
+
+We apply a rotation so the factors are uncorrelated and maximize the variance of the loadings. This helps interpret the result so variable loads are high on one factor and small on others.
+
+```{r}
+num_factors = 5
+
+data_EFA <- data_EFA %>%
+  dplyr::select(where(is.numeric)) %>%
+  na.omit() %>%
+  dplyr::select(where(~ sd(., na.rm = TRUE) > 0)) 
+
+fa_result <- psych::fa(data_EFA, fm = "pa",  nfactors = num_factors, rotate = "varimax")
+fa_result
+```
+
+-   h2 -\> **communality:** $$h^2_j = \sum_{k=1}^{m} \lambda_{jk}^2$$
+-   u2 -\> **uniqueness:** $$u^2_j = 1 - h^2_j$$
+
+Let´s see in more detail the loadings, grouped to interpret the hidden factors in the data:
+
+```{r}
+print(fa_result$loadings, cut = 0.4, sort = TRUE)
+```
+
+**Factor 1 – Sleep Quality**
+
+-   **The factor increases** when `light_sleep` and `rem_sleep` increase. and the Body battery recharges well.
+
+-   **The factor decreases** when average stress is high.
+
+**Factor 2 - High Intensity Performance**
+
+-   **The factor increases** when activity intensity peaks (`vigorous_secs`, `hr_max`).
+
+-   **The factor increases** along with active calorie burn.
+
+-   **The factor represents** "Sport" rather than general movement.
+
+**Factor 3 – Daily Step Volume**
+
+-   **The factor increases** largely based on `steps` and hitting your `step_goal`.
+
+-   **The factor decreases** when `sport_exposure` increases.
+
+**Factor 4 – Stress**
+
+-   **The factor increases** with the stress, along with the resting heart rate (`rhr`) and minimum heart rate (`hr_min`).
+
+**Factor 5 – Energy reserves**
+
+-   **The factor increases** when the minimum body battery (`bb_min`) stays high.
+
+-   **The factor represents** ending the day with energy left in the tank, rather than draining the battery to zero.
+
+```{r}
+colnames(fa_result$loadings) <- c("Sleep\nQuality", 
+                "High Intensity\nPerformance", 
+                "Stress", 
+                "Daily Step\nVolume", # por alguna razon esta al reves
+                "Energy Reserves")
+
+psych::fa.diagram(fa_result, cut = 0.4, simple = FALSE,cex = 0.8,l.cex = 0.6, e.size = 0.051,rsize = 0.8,main = "Factor Analysis of Health Metrics (k = 5)") 
+```
+
+------------------------------------------------------------------------
+
+# Clustering over PCA data (k=3)
+
+```{r}
+pca_data_for_clustering <- rbind(
+  train_pca[, 1:3], 
+  test_pca[, 1:3]
+)
+colnames(pca_data_for_clustering) <- c("Recovery vs. Stress","High intensity and caloric burn","Low vs. high intensity exercise")
+```
+
+```{r}
+numeric_cols <- names(pca_data_for_clustering)[sapply(pca_data_for_clustering, is.numeric)]
+for (col in numeric_cols) {
+  
+  p <- ggplot(pca_data_for_clustering, aes(x = "", y = .data[[col]])) + 
+    geom_boxplot() + 
+    labs(y = col, title = paste("Boxplot of", col)) + 
+    theme_minimal()
+  print(p)
+}
+```
+
+We need to remove the outliers. SPOILER: This takes out a lot of data, so I will not do that, I will cap the max values (I don´t know how legal it is)
+
+```{r}
+winsorize <- function(x) {
+  lower_limit <- quantile(x, 0.05, na.rm = TRUE)
+  upper_limit <- quantile(x, 0.95, na.rm = TRUE)
+  pmax(lower_limit, pmin(x, upper_limit))
+}
+data_capped <- pca_data_for_clustering %>%
+  mutate(across(where(is.numeric), winsorize))
+```
+
+```{r}
+data_scaled <- scale(data_capped)#scale(pca_data_for_clustering)
+```
+
+```{r}
+# Elbow Method
+
+wcss <- numeric(10)  
+for (i in 1:10) {
+  kmeans_result <- kmeans(data_scaled, centers = i)
+  wcss[i] <- kmeans_result$tot.withinss
+}
+
+plot(1:10, wcss, type = "b", pch = 19, col = "blue",
+     xlab = "Number of clusters", ylab = "WCSS",
+     main = "Elbow Method")
+```
+
+### With 4 clusters:
+
+```{r}
+num_clusters <- 4
+kmeans_result <- kmeans(data_scaled, centers = num_clusters)
+print(kmeans_result)
+```
+
+```{r}
+silhouette_scores <- silhouette(kmeans_result$cluster, dist(data_scaled))
+hist(silhouette_scores) # ALGO RARO ESTA OCURRIENDO!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!! COnsultar
+```
+
+```{r}
+avg_silhouette_score <- mean(silhouette_scores[, 3])
+print(avg_silhouette_score)
+```
+
+```{r}
+hopkins_stat <- hopkins(data_scaled)
+print(hopkins_stat)
+```
+
+```{r}
+hopkins.pval(hopkins_stat, nrow(data_scaled))
+```
+
+```{r}
+# install.packages("factoextra")
+library(factoextra)
+
+fviz_cluster(kmeans_result, 
+             data = data_scaled, 
+             geom = "point",    
+             ellipse.type = "convex", 
+             ggtheme = theme_minimal(),
+             main = "Cluster Visualization (PCA Map)"
+)
+```
+
+```{r}
+library(plotly)
+data_scaled = data.frame(data_scaled)
+colnames(data_scaled) <- c("Recovery vs. Stress","High intensity and caloric burn","Low vs. high intensity exercise")
+
+plot_ly(data = data_scaled, 
+        x = ~`Recovery vs. Stress`,             
+        y = ~`High intensity and caloric burn`,   
+        z = ~`Low vs. high intensity exercise`,   
+        type = "scatter3d",
+        mode = "markers",
+        color = as.factor(kmeans_result$cluster)) %>% 
+  layout(
+    title = "3D Cluster Visualization on PCA Data",
+    scene = list(
+      xaxis = list(title = "Recovery vs. Stress"),
+      yaxis = list(title = "High intensity/Caloric burn"),
+      zaxis = list(title = "Low vs. High Intensity")
+    )
+  )
+```
+
+```{r}
+
+original_data_combined <- rbind(
+  train_data[, -col_remov_number], 
+  test_data[, -col_remov_number]
+)
+original_data_combined$Cluster <- as.factor(kmeans_result$cluster)
+
+cluster_profiling <- original_data_combined %>%
+  group_by(Cluster) %>%
+  summarise(across(where(is.numeric), mean, .names = "mean_{.col}"))
+
+print(cluster_profiling)
+```
