@@ -651,6 +651,11 @@
             // Apply method-specific variable visibility & defaults
             applyMethodVariableRules();
 
+            // Refresh regression target if that method is active
+            if (document.getElementById('methodSelect').value === 'REGRESSION') {
+                populateRegressionTarget();
+            }
+
             // Restore cached config if exists for current method
             const currentMethod = document.getElementById('methodSelect').value;
             if (methodCache[currentMethod]) {
@@ -945,13 +950,19 @@
             const method = document.getElementById('methodSelect').value;
             let selectedVars = getChecked('variableCheckboxes');
 
-            // For regression, enforce compositional exclusion
+            // For regression, enforce compositional exclusion and validate target
             if (method === 'REGRESSION') {
                 const target = document.getElementById('regressionTarget').value;
-                if (target) {
-                    const { excluded } = getCompositionalExclusions(target);
-                    selectedVars = selectedVars.filter(v => !excluded.includes(v));
+                if (!target) {
+                    errorBanner.textContent = 'Please select a regression target variable (Y).';
+                    errorBanner.classList.remove('d-none');
+                    btn.disabled = false;
+                    spinner.classList.add('d-none');
+                    spinnerText.classList.add('d-none');
+                    return;
                 }
+                const { excluded } = getCompositionalExclusions(target);
+                selectedVars = selectedVars.filter(v => !excluded.includes(v));
             }
 
             // Guard: need at least 2 variables for any multivariate method
@@ -1045,12 +1056,25 @@
                 const sel = document.getElementById('regressionTarget');
                 const prev = sel.value;
                 sel.innerHTML = '<option value="">— select target —</option>';
-                // Only show visible, checked variables as regression targets
+
+                // Build a set of variables that actually have data (from density scan)
+                const varsWithData = new Set();
+                if (densityData && densityData.variables) {
+                    const minDensity = parseInt(document.getElementById('densitySlider').value) / 100;
+                    for (const v of densityData.variables) {
+                        if (v.density >= minDensity) varsWithData.add(v.key);
+                    }
+                }
+
+                // Only show visible, checked variables that also have real data
                 document.querySelectorAll('#variableCheckboxes [data-var]:not(.d-none)').forEach(wrapper => {
                     const cb = wrapper.querySelector('input');
                     if (!cb || !cb.checked) return;
+                    // Skip if density data is loaded and this var has no data
+                    if (varsWithData.size > 0 && !varsWithData.has(cb.value)) return;
                     sel.innerHTML += `<option value="${cb.value}">${cb.value}</option>`;
                 });
+
                 // Restore previous selection if still valid
                 if (prev && sel.querySelector(`option[value="${prev}"]`)) {
                     sel.value = prev;
