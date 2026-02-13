@@ -73,6 +73,18 @@
                         </select>
                     </div>
 
+                    <!-- Compositional warning (shown when tautological predictors detected) -->
+                    <div class="col-12 d-none" id="compositionalWarning">
+                        <div class="alert alert-warning py-2 mb-0 d-flex align-items-start gap-2">
+                            <i class="bi bi-exclamation-triangle-fill mt-1"></i>
+                            <div>
+                                <strong>Compositional warning:</strong>
+                                <span id="compositionalWarningText"></span>
+                                <br><small class="text-muted" id="compositionalExcludedVars"></small>
+                            </div>
+                        </div>
+                    </div>
+
                     <!-- MDS dimensions (visible only for MDS) -->
                     <div class="col-md-3 d-none" id="mdsDimsGroup">
                         <label class="form-label fw-semibold">Dimensions</label>
@@ -378,6 +390,14 @@
 
         <!-- REGRESSION Results -->
         <div id="regressionResults" class="d-none">
+            <!-- Tautology warning (shown when R² ≥ 0.99) -->
+            <div id="tautologyWarning" class="alert alert-danger d-none mb-3">
+                <i class="bi bi-exclamation-octagon-fill me-2"></i>
+                <strong>Tautological model detected (R² ≥ 0.99):</strong>
+                <span id="tautologyWarningText">The near-perfect fit suggests the target variable is a mathematical
+                function of the predictors. This is not a meaningful statistical model — it's an algebraic identity.
+                Try removing component variables or choosing a different target.</span>
+            </div>
             <div class="row g-4">
                 <div class="col-lg-4">
                     <div class="card shadow-sm border-0 h-100">
@@ -486,6 +506,81 @@
             let densityData = null;     // full DataDensityResult
             let availableVars = [];     // keys that passed the threshold
 
+            // ── Method result cache ──────────────────────────────────────────
+            // Stores { config: {...}, data: {...} } per method key
+            const methodCache = {};
+
+            // ── Compositional variable groups ────────────────────────────────
+            // When a target belongs to a group, its sibling components should
+            // be excluded as predictors to avoid tautological regressions.
+            const compositionalGroups = [
+                {
+                    parent: 'TotalSleep',
+                    components: ['DeepSleep', 'LightSleep', 'RemSleep', 'AwakeSecs'],
+                    reason: 'TotalSleep ≈ DeepSleep + LightSleep + RemSleep + AwakeSecs (mathematical identity)'
+                },
+                {
+                    parent: 'TotalCalories',
+                    components: ['ActiveCalories'],
+                    reason: 'TotalCalories includes ActiveCalories (partial identity)'
+                },
+            ];
+
+            /** Given a regression target, return { excluded: [...], reason: '...' } */
+            function getCompositionalExclusions(target) {
+                for (const g of compositionalGroups) {
+                    if (g.parent === target) {
+                        return { excluded: g.components, reason: g.reason };
+                    }
+                    if (g.components.includes(target)) {
+                        return { excluded: [g.parent, ...g.components.filter(c => c !== target)],
+                                 reason: `${target} is a component of ${g.parent} — including ${g.parent} or sibling components would create a tautological model` };
+                    }
+                }
+                return { excluded: [], reason: '' };
+            }
+
+            // ── Variables to HIDE per method (statistically meaningless) ────
+            const methodExcludedVars = {
+                'PCA':        ['GoalSteps'],
+                'EFA':        ['GoalSteps'],
+                'CCA':        ['GoalSteps'],
+                'CLUSTER':    ['GoalSteps'],
+                'REGRESSION': ['GoalSteps'],
+                'MDS':        ['GoalSteps'],
+            };
+
+            // ── Mutual exclusion: aggregate ↔ components ─────────────────────
+            // Checking one side auto-unchecks the other to prevent redundancy
+            const mutualExclusionGroups = [
+                {
+                    aggregate:  ['TotalSleep'],
+                    components: ['DeepSleep', 'LightSleep', 'RemSleep', 'AwakeSecs'],
+                    hint: 'Use either TotalSleep (aggregate) or its sleep-stage components, not both',
+                },
+                {
+                    aggregate:  ['TotalCalories'],
+                    components: ['ActiveCalories'],
+                    hint: 'TotalCalories includes ActiveCalories — using both adds redundancy',
+                },
+            ];
+
+            // ── Smart defaults per method ────────────────────────────────────
+            // null = user configures manually; array = auto-check on first visit
+            const methodDefaultVars = {
+                'PCA':        ['Steps', 'ActiveCalories', 'Distance', 'SleepScore', 'DeepSleep', 'LightSleep', 'RemSleep', 'RestingHR', 'BodyBatteryChange', 'AvgRespiration', 'LowestSpO2'],
+                'EFA':        ['Steps', 'ActiveCalories', 'Distance', 'SleepScore', 'DeepSleep', 'LightSleep', 'RemSleep', 'RestingHR', 'BodyBatteryChange', 'AvgRespiration', 'LowestSpO2'],
+                'CCA':        null,
+                'CLUSTER':    ['Steps', 'ActiveCalories', 'Distance', 'SleepScore', 'DeepSleep', 'LightSleep', 'RemSleep', 'RestingHR', 'BodyBatteryChange'],
+                'REGRESSION': null,
+                'MDS':        ['Steps', 'ActiveCalories', 'Distance', 'SleepScore', 'DeepSleep', 'LightSleep', 'RemSleep', 'RestingHR', 'BodyBatteryChange'],
+            };
+
+            const ccaDefaultSets = {
+                set1: ['Steps', 'ActiveCalories', 'Distance'],
+                set2: ['SleepScore', 'DeepSleep', 'LightSleep', 'RemSleep', 'RestingHR', 'BodyBatteryChange'],
+            };
+
             // Default date range: last 90 days
             const today = new Date();
             const d90 = new Date(today); d90.setDate(d90.getDate() - 90);
@@ -552,6 +647,15 @@
             buildDensityCheckboxes('variableCheckboxes', densityData.variables, 'var_');
             buildDensityCheckboxes('ccaSet1Checks', densityData.variables, 'cca1_');
             buildDensityCheckboxes('ccaSet2Checks', densityData.variables, 'cca2_');
+
+            // Apply method-specific variable visibility & defaults
+            applyMethodVariableRules();
+
+            // Restore cached config if exists for current method
+            const currentMethod = document.getElementById('methodSelect').value;
+            if (methodCache[currentMethod]) {
+                restoreMethodConfig(currentMethod, methodCache[currentMethod].config);
+            }
             }
 
             // ── Build checkboxes with density badges ─────────────────────────
@@ -587,6 +691,7 @@
 
             const wrapper = document.createElement('div');
             wrapper.className = 'form-check form-check-inline' + (disabled ? ' opacity-50' : '');
+            wrapper.dataset.var = v.key;
             wrapper.innerHTML = `
             <input class="form-check-input" type="checkbox" value="${v.key}" id="${id}"
             ${disabled ? 'disabled' : ''} ${v.available ? 'checked' : ''}>
@@ -599,6 +704,85 @@
             }
             }
 
+            // ── Mutual exclusion handler ─────────────────────────────────────
+            function handleMutualExclusion(containerId, changedVar, isChecked) {
+                if (!isChecked) return;
+                for (const group of mutualExclusionGroups) {
+                    if (group.aggregate.includes(changedVar)) {
+                        group.components.forEach(comp => {
+                            const cb = document.querySelector(`#${containerId} input[value="${comp}"]`);
+                            if (cb) cb.checked = false;
+                        });
+                    } else if (group.components.includes(changedVar)) {
+                        group.aggregate.forEach(agg => {
+                            const cb = document.querySelector(`#${containerId} input[value="${agg}"]`);
+                            if (cb) cb.checked = false;
+                        });
+                    }
+                }
+            }
+
+            // Delegated listeners for mutual exclusion on all checkbox containers
+            ['variableCheckboxes', 'ccaSet1Checks', 'ccaSet2Checks'].forEach(cid => {
+                document.getElementById(cid).addEventListener('change', function (e) {
+                    if (e.target.type === 'checkbox') {
+                        handleMutualExclusion(cid, e.target.value, e.target.checked);
+                    }
+                });
+            });
+
+            // ── Apply method-specific variable rules ─────────────────────────
+            function applyMethodVariableRules(method) {
+                if (!method) method = document.getElementById('methodSelect').value;
+                const excluded = methodExcludedVars[method] || [];
+
+                // Hide excluded variables in all checkbox containers
+                ['variableCheckboxes', 'ccaSet1Checks', 'ccaSet2Checks'].forEach(cid => {
+                    document.querySelectorAll(`#${cid} [data-var]`).forEach(wrapper => {
+                        if (excluded.includes(wrapper.dataset.var)) {
+                            wrapper.classList.add('d-none');
+                            const cb = wrapper.querySelector('input');
+                            if (cb) cb.checked = false;
+                        } else {
+                            wrapper.classList.remove('d-none');
+                        }
+                    });
+                });
+
+                // Apply smart defaults if no cache exists for this method
+                if (!methodCache[method]) {
+                    const defaults = methodDefaultVars[method];
+                    if (defaults) {
+                        document.querySelectorAll('#variableCheckboxes [data-var]').forEach(wrapper => {
+                            const cb = wrapper.querySelector('input');
+                            if (!cb || cb.disabled || wrapper.classList.contains('d-none')) return;
+                            cb.checked = defaults.includes(cb.value);
+                        });
+                    }
+
+                    // CCA set defaults
+                    if (method === 'CCA') {
+                        document.querySelectorAll('#ccaSet1Checks [data-var]').forEach(wrapper => {
+                            const cb = wrapper.querySelector('input');
+                            if (!cb || cb.disabled || wrapper.classList.contains('d-none')) return;
+                            cb.checked = ccaDefaultSets.set1.includes(cb.value);
+                        });
+                        document.querySelectorAll('#ccaSet2Checks [data-var]').forEach(wrapper => {
+                            const cb = wrapper.querySelector('input');
+                            if (!cb || cb.disabled || wrapper.classList.contains('d-none')) return;
+                            cb.checked = ccaDefaultSets.set2.includes(cb.value);
+                        });
+                        // Main checkboxes = union of both sets
+                        const ccaAll = [...ccaDefaultSets.set1, ...ccaDefaultSets.set2];
+                        document.querySelectorAll('#variableCheckboxes [data-var]').forEach(wrapper => {
+                            const cb = wrapper.querySelector('input');
+                            if (!cb || cb.disabled || wrapper.classList.contains('d-none')) return;
+                            cb.checked = ccaAll.includes(cb.value);
+                        });
+                    }
+                }
+            }
+
             // ── Method toggle ────────────────────────────────────────────────
             document.getElementById('methodSelect').addEventListener('change', function () {
             const m = this.value;
@@ -608,14 +792,140 @@
             document.getElementById('linkageGroup').classList.toggle('d-none', m !== 'CLUSTER');
             document.getElementById('regressionTargetGroup').classList.toggle('d-none', m !== 'REGRESSION');
             document.getElementById('mdsDimsGroup').classList.toggle('d-none', m !== 'MDS');
+            document.getElementById('compositionalWarning').classList.add('d-none');
 
-            // Populate regression target dropdown from checked variables
+            // Apply per-method variable visibility and smart defaults
+            applyMethodVariableRules(m);
+
+            // Populate regression target dropdown from visible checked variables
             if (m === 'REGRESSION') populateRegressionTarget();
+
+            // ── Restore cached results or show defaults ──────────────
+            const cached = methodCache[m];
+            if (cached && cached.data) {
+                // Restore method-specific config
+                restoreMethodConfig(m, cached.config);
+                // Re-render cached results
+                renderResults(cached.data);
+            } else {
+                // No cache — hide results, show default config
+                document.getElementById('resultsSection').classList.add('d-none');
+                document.getElementById('naReport').classList.add('d-none');
+                hideAllResultPanels();
+            }
             });
 
-            // ── Collect checked values ───────────────────────────────────────
+            // ── Collect checked values (excludes hidden vars) ────────────────
             function getChecked(containerId) {
-            return [...document.querySelectorAll(`#${containerId} input:checked`)].map(c => c.value);
+            return [...document.querySelectorAll(`#${containerId} [data-var]:not(.d-none) input:checked`)].map(c => c.value);
+            }
+
+            // ── Hide all result panels ───────────────────────────────────────
+            function hideAllResultPanels() {
+                ['pcaResults', 'efaResults', 'ccaResults', 'clusterResults', 'regressionResults', 'mdsResults']
+                    .forEach(id => document.getElementById(id).classList.add('d-none'));
+            }
+
+            // ── Capture current method-specific config ──────────────────────
+            function captureMethodConfig(method) {
+                const cfg = {
+                    variables: getChecked('variableCheckboxes'),
+                    startDate: document.getElementById('startDate').value,
+                    endDate: document.getElementById('endDate').value,
+                };
+                switch (method) {
+                    case 'EFA':
+                        cfg.nFactors = document.getElementById('nFactors').value;
+                        break;
+                    case 'CCA':
+                        cfg.ccaSet1 = getChecked('ccaSet1Checks');
+                        cfg.ccaSet2 = getChecked('ccaSet2Checks');
+                        break;
+                    case 'CLUSTER':
+                        cfg.nClusters = document.getElementById('nClusters').value;
+                        cfg.linkageMethod = document.getElementById('linkageMethod').value;
+                        break;
+                    case 'REGRESSION':
+                        cfg.regressionTarget = document.getElementById('regressionTarget').value;
+                        break;
+                    case 'MDS':
+                        cfg.mdsDims = document.getElementById('mdsDims').value;
+                        break;
+                }
+                return cfg;
+            }
+
+            // ── Restore method-specific config from cache ───────────────────
+            function restoreMethodConfig(method, cfg) {
+                if (!cfg) return;
+                // Restore variable checkboxes
+                if (cfg.variables) {
+                    document.querySelectorAll('#variableCheckboxes input[type=checkbox]').forEach(cb => {
+                        cb.checked = cfg.variables.includes(cb.value);
+                    });
+                }
+                switch (method) {
+                    case 'EFA':
+                        if (cfg.nFactors) document.getElementById('nFactors').value = cfg.nFactors;
+                        break;
+                    case 'CCA':
+                        if (cfg.ccaSet1) {
+                            document.querySelectorAll('#ccaSet1Checks input[type=checkbox]').forEach(cb => {
+                                cb.checked = cfg.ccaSet1.includes(cb.value);
+                            });
+                        }
+                        if (cfg.ccaSet2) {
+                            document.querySelectorAll('#ccaSet2Checks input[type=checkbox]').forEach(cb => {
+                                cb.checked = cfg.ccaSet2.includes(cb.value);
+                            });
+                        }
+                        break;
+                    case 'CLUSTER':
+                        if (cfg.nClusters) document.getElementById('nClusters').value = cfg.nClusters;
+                        if (cfg.linkageMethod) document.getElementById('linkageMethod').value = cfg.linkageMethod;
+                        break;
+                    case 'REGRESSION':
+                        populateRegressionTarget();
+                        if (cfg.regressionTarget) {
+                            document.getElementById('regressionTarget').value = cfg.regressionTarget;
+                            handleRegressionTargetChange();
+                        }
+                        break;
+                    case 'MDS':
+                        if (cfg.mdsDims) document.getElementById('mdsDims').value = cfg.mdsDims;
+                        break;
+                }
+            }
+
+            // ── Regression target change handler ────────────────────────────
+            // Auto-exclude compositional variables and show warning
+            document.getElementById('regressionTarget').addEventListener('change', handleRegressionTargetChange);
+
+            function handleRegressionTargetChange() {
+                const target = document.getElementById('regressionTarget').value;
+                const warningEl = document.getElementById('compositionalWarning');
+                const warningTextEl = document.getElementById('compositionalWarningText');
+                const excludedVarsEl = document.getElementById('compositionalExcludedVars');
+
+                if (!target) {
+                    warningEl.classList.add('d-none');
+                    return;
+                }
+
+                const { excluded, reason } = getCompositionalExclusions(target);
+                if (excluded.length > 0) {
+                    warningTextEl.textContent = reason;
+                    excludedVarsEl.textContent = `Auto-excluded from predictors: ${excluded.join(', ')}`;
+                    warningEl.classList.remove('d-none');
+                    // Uncheck the excluded variables
+                    document.querySelectorAll('#variableCheckboxes input[type=checkbox]').forEach(cb => {
+                        if (excluded.includes(cb.value)) {
+                            cb.checked = false;
+                        }
+                    });
+                } else {
+                    warningEl.classList.add('d-none');
+                }
             }
 
             // ── Run ──────────────────────────────────────────────────────────
@@ -633,7 +943,16 @@
             document.getElementById('naReport').classList.add('d-none');
 
             const method = document.getElementById('methodSelect').value;
-            const selectedVars = getChecked('variableCheckboxes');
+            let selectedVars = getChecked('variableCheckboxes');
+
+            // For regression, enforce compositional exclusion
+            if (method === 'REGRESSION') {
+                const target = document.getElementById('regressionTarget').value;
+                if (target) {
+                    const { excluded } = getCompositionalExclusions(target);
+                    selectedVars = selectedVars.filter(v => !excluded.includes(v));
+                }
+            }
 
             // Guard: need at least 2 variables for any multivariate method
             if (selectedVars.length < 2) {
@@ -672,6 +991,12 @@
             errorBanner.classList.remove('d-none');
             return;
             }
+
+            // Cache results + config for this method
+            methodCache[method] = {
+                config: captureMethodConfig(method),
+                data: data,
+            };
 
             renderResults(data);
             } catch (ex) {
@@ -718,10 +1043,17 @@
             // ── Helper: Populate regression target dropdown ──────────────────
             function populateRegressionTarget() {
                 const sel = document.getElementById('regressionTarget');
+                const prev = sel.value;
                 sel.innerHTML = '<option value="">— select target —</option>';
-                const checked = getChecked('variableCheckboxes');
-                for (const v of checked) {
-                    sel.innerHTML += `<option value="${v}">${v}</option>`;
+                // Only show visible, checked variables as regression targets
+                document.querySelectorAll('#variableCheckboxes [data-var]:not(.d-none)').forEach(wrapper => {
+                    const cb = wrapper.querySelector('input');
+                    if (!cb || !cb.checked) return;
+                    sel.innerHTML += `<option value="${cb.value}">${cb.value}</option>`;
+                });
+                // Restore previous selection if still valid
+                if (prev && sel.querySelector(`option[value="${prev}"]`)) {
+                    sel.value = prev;
                 }
             }
 
@@ -1043,6 +1375,14 @@
             function renderRegression(data) {
             document.getElementById('regressionResults').classList.remove('d-none');
             const reg = data.regression;
+
+            // Tautology detection: R² ≥ 0.99 is suspicious
+            const tautologyEl = document.getElementById('tautologyWarning');
+            if (reg.rSquared >= 0.99) {
+                tautologyEl.classList.remove('d-none');
+            } else {
+                tautologyEl.classList.add('d-none');
+            }
 
             document.getElementById('regTarget').textContent = reg.targetVariable;
             document.getElementById('regR2').textContent = reg.rSquared?.toFixed(4) ?? '–';
