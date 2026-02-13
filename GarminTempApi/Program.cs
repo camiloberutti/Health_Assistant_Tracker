@@ -50,6 +50,7 @@ builder.Services.AddScoped<GarminTempApi.Services.FitActivityParser>();
 builder.Services.AddScoped<InsightDataBuilder>();
 builder.Services.AddScoped<DataStatusService>();
 builder.Services.AddScoped<DashboardSummaryService>();
+builder.Services.AddScoped<RAnalyticsService>();
 
 builder.Services.AddOptions<OpenAiOptions>()
     .Bind(builder.Configuration.GetSection(OpenAiOptions.SectionName))

@@ -1,0 +1,322 @@
+---
+title: "Appendix - Statistics for Data Science Laboratory Project"
+author: "Camilo Julian Berutti"
+format:
+  html:
+    embed-resources: true
+    toc: true
+    toc-depth: 3
+    code-fold: true
+    code-summary: "Show code"
+    theme: cosmo
+editor: visual
+engine: knitr
+---
+
+The databases analyzed in this project were downloaded with the GarminDB library (<https://github.com/tcgoetz/GarminDB>) in Python. These databases contain my Garmin Connect information about activities and other health-related metrics. It returns the following DBs:
+
+-   fitbit.db
+
+-   garmin.db
+
+-   garmin_activities.db
+
+-   garmin_monitoring.db
+
+-   garmin_summary.db
+
+-   summary.db
+
+In this notebook I extract
+
+```{r}
+# Needed packages
+#install.packages("DBI")
+#install.packages("RSQLite")
+library(DBI)
+library(dplyr)
+library(purrr)
+# packages
+library(lubridate)
+
+```
+
+```{r}
+# Load environment variables
+if (file.exists(".env")) {
+  readRenviron(".env")
+} else if (file.exists("../.env")) {
+  readRenviron("../.env")
+}
+
+# conecta al archivo sqlite en tu .GarminDb
+con_activities <- dbConnect(RSQLite::SQLite(), Sys.getenv("GARMIN_ACTIVITIES_DB"))
+
+# ver qué tablas existen
+#dbListTables(con_activities)
+#dbGetQuery(con_activities, "SELECT * FROM activities LIMIT 5")
+
+# traer datos a un data.frame
+activities_summary <- dbReadTable(con_activities, "activities")
+# eliminar columnas que son todo NA
+activities_clean <- activities_summary %>% select(where(~ !all(is.na(.x))))
+# Eliminar columnas que no me interesan
+activities <- activities_clean %>% select(-"self_eval_effort", -"type")
+
+dbDisconnect(con_activities) # Cierro DB
+#head(activities)
+```
+
+```{r}
+# conecta al archivo sqlite en tu .GarminDb
+#dbDisconnect(con) # Cierro DB
+
+con_garmin <- dbConnect(RSQLite::SQLite(), Sys.getenv("GARMIN_DB"))
+
+# ver qué tablas existen
+#dbListTables(con_garmin)
+#dbGetQuery(con_garmin, "SELECT * FROM sleep WHERE day >= '2025-01-16' LIMIT 5")
+```
+
+Here I select the data I will analyze. And I export the useful dataframes as Rdata?.
+
+Find sleep data in other DB (garmin.db, table sleep) , or in garmin_summary.db, table days_summary
+
+maybe it is better if from daily_summary just bring the battery, and from the others, the sleep data. What about stress??
+
+I will use garmin.db, garmin_activities.db. (Maybe garmin_monitoring.db)
+
+### Cleaning garmin.db
+
+```{r}
+daily_summary_filtered <- dbGetQuery(con_garmin, "SELECT * FROM daily_summary WHERE day >= '2025-01-16'")
+
+#print(daily_summary_filtered)
+daily_summary <- daily_summary_filtered %>% select(where(~ !all(is.na(.x))))
+daily_summary <- daily_summary %>% select(-"hydration_goal", -"floors_goal",-"hydration_intake",-"sweat_loss",-"calories_bmr",-"intensity_time_goal")
+```
+
+```{r}
+sleep_events <- dbGetQuery(con_garmin, "SELECT * FROM sleep WHERE day >= '2025-01-16'")
+#dbGetQuery(con_garmin, "SELECT * FROM stress LIMIT 5")
+sleep_events<- sleep_events %>% select(where(~ !all(is.na(.x))))
+```
+
+```{r}
+daily_summary <- daily_summary %>%
+  mutate(
+    day = as.Date(day),
+    moderate_secs = as.numeric(as.difftime(moderate_activity_time, format="%H:%M:%OS", units="secs")),
+    vigorous_secs = as.numeric(as.difftime(vigorous_activity_time, format="%H:%M:%OS", units="secs"))
+  )# %>% select(-moderate_activity_time, -vigorous_activity_time)  # optional: drop original chr
+
+
+sleep_events <- sleep_events %>%
+  mutate(
+    day   = as.Date(day),
+    start = ymd_hms(start),
+    end   = ymd_hms(end),
+    total_sleep_secs = as.numeric(as.difftime(total_sleep, format="%H:%M:%OS", units="secs")),
+    deep_sleep_secs  = as.numeric(as.difftime(deep_sleep,  format="%H:%M:%OS", units="secs")),
+    light_sleep_secs = as.numeric(as.difftime(light_sleep, format="%H:%M:%OS", units="secs")),
+    rem_sleep_secs   = as.numeric(as.difftime(rem_sleep,   format="%H:%M:%OS", units="secs")),
+    awake_secs       = as.numeric(as.difftime(awake,       format="%H:%M:%OS", units="secs"))
+  )
+
+activities <- activities %>%
+  mutate(
+    start_time = lubridate::ymd_hms(start_time),
+    stop_time  = lubridate::ymd_hms(stop_time),
+    elapsed_secs = as.numeric(as.difftime(elapsed_time, format="%H:%M:%OS", units="secs")),
+    moving_secs  = as.numeric(as.difftime(moving_time,  format="%H:%M:%OS", units="secs")),
+    hrz_1_secs   = as.numeric(as.difftime(hrz_1_time,   format="%H:%M:%OS", units="secs")),
+    hrz_2_secs   = as.numeric(as.difftime(hrz_2_time,   format="%H:%M:%OS", units="secs")),
+    hrz_3_secs   = as.numeric(as.difftime(hrz_3_time,   format="%H:%M:%OS", units="secs")),
+    hrz_4_secs   = as.numeric(as.difftime(hrz_4_time,   format="%H:%M:%OS", units="secs")),
+    hrz_5_secs   = as.numeric(as.difftime(hrz_5_time,   format="%H:%M:%OS", units="secs"))
+  )
+
+activities$day <- as.Date(activities$start_time)
+```
+
+To characterize the sport contribution to the daily activities I calculate a new measure called "sport_exposure", which is calculated as: $$\text{sport_exposure} = \{0.6 * \text{avg_hr} + 0.4\text{max_hr}\} * \text{elapsed_secs}$$, the election of the weights and function form is completely arbitrary.
+
+```{r}
+# ---------------------------
+# 1) Build the daily activity summary from raw activities, keeping a count of real activities.
+#    We keep the raw sport_exposure as sport_exposure_raw (no imputation yet).
+activity_load_raw <- activities %>%
+  mutate(day = as.Date(day)) %>%
+  mutate(
+    combined_hr = 0.6 * as.numeric(avg_hr) + 0.4 * as.numeric(max_hr),
+    sport_exposure_raw = combined_hr * as.numeric(elapsed_secs)
+  ) %>%
+  group_by(day) %>%
+  summarise(
+    sport_exposure_raw = sum(sport_exposure_raw, na.rm = TRUE),
+    n_activities = n()                          # count of activity rows that day
+  ) %>%
+  ungroup()
+
+# ensure sorted by date
+activity_load_raw <- activity_load_raw %>% arrange(day)
+
+# ---------------------------
+# 2) Helper: imputation that searches ±10/20/30 days, applies penalties, fallback = 10% global mean
+impute_local_mean <- function(current_day, data,
+                              windows = c(10, 20, 30),
+                              penalties = c(1.0, 0.5, 0.25),    # decreasing weight with distance
+                              fallback_frac = 0.10) {            # 10% fallback of global mean
+  # data is activity_load_raw
+  for (i in seq_along(windows)) {
+    days_window <- windows[i]
+    penalty <- penalties[i]
+
+    subset <- data %>%
+      filter(!is.na(sport_exposure_raw),
+             day >= current_day - days(days_window),
+             day <= current_day + days(days_window))
+
+    if (nrow(subset) > 0) {
+      return(mean(subset$sport_exposure_raw, na.rm = TRUE) * penalty)
+    }
+  }
+  # fallback if nothing found in any window
+  global_mean <- mean(data$sport_exposure_raw, na.rm = TRUE)
+  if (is.na(global_mean) || global_mean == 0) {
+    return(0)      # extreme fallback if there's no data at all
+  }
+  return(fallback_frac * global_mean)
+}
+
+# ---------------------------
+# 3) Join raw exposures into daily_summary (keeping n_activities and raw exposure)
+daily_summary <- daily_summary %>%
+  mutate(day = as.Date(day)) %>%
+  left_join(
+    activity_load_raw %>% select(day, sport_exposure_raw, n_activities),
+    by = "day"
+  )
+
+# ---------------------------
+# 4) Impute missing sport_exposure (use the local imputer). The imputed result we put in
+#    a new column 'sport_exposure' (overwriting NA values).
+daily_summary <- daily_summary %>%
+  arrange(day) %>%
+  mutate(
+    # initial: if there's a real raw exposure (n_activities>0) use it, else NA (to impute)
+    sport_exposure = ifelse(!is.na(sport_exposure_raw) & n_activities > 0,
+                             sport_exposure_raw,
+                             NA_real_)
+  ) %>%
+  mutate(
+    sport_exposure = ifelse(
+      is.na(sport_exposure),
+      # map_dbl applies imputation for each day using activity_load_raw as reference
+      map_dbl(day, ~ impute_local_mean(.x, activity_load_raw)),
+      sport_exposure
+    )
+  )
+
+# ---------------------------
+# 5) Create an indicator whether the day had real activity (before imputation)
+daily_summary <- daily_summary %>%
+  mutate(had_real_activity = ifelse(!is.na(sport_exposure_raw) & n_activities > 0, TRUE, FALSE))
+
+# ---------------------------
+# 6) Define "very active" threshold based on the distribution of real activity days
+#    We'll use the 75th percentile of sport_exposure_raw among days that had real activity.
+very_active_threshold <- activity_load_raw %>%
+  filter(!is.na(sport_exposure_raw) & sport_exposure_raw > 0) %>%
+  pull(sport_exposure_raw) %>%
+  quantile(probs = 0.75, na.rm = TRUE)
+
+# If there were no real activity days, set a safe threshold = Inf so nothing becomes "very active"
+if (length(very_active_threshold) == 0 || is.na(very_active_threshold)) {
+  very_active_threshold <- Inf
+}
+
+# ---------------------------
+# 7) Build the categorical variable activity_status according to your rules:
+#    - "very active" if that day had real activity AND sport_exposure >= threshold
+#    - "active"      if that day had real activity but below threshold
+#    - "rest"        if that day had NO real activity but the day before was "very active"
+#    - "inactive"    if that day and the day before had no exercise
+#
+# We compute a preliminary status for days with real activity, then use lag(prelim) to classify rest/inactive.
+daily_summary <- daily_summary %>%
+  arrange(day) %>%
+  mutate(
+    prelim_status = case_when(
+      had_real_activity & sport_exposure >= very_active_threshold ~ "very active",
+      had_real_activity & sport_exposure <  very_active_threshold ~ "active",
+      TRUE ~ NA_character_
+    )
+  ) %>%
+  # now finalize status using the previous day's prelim_status
+  mutate(
+    activity_status = case_when(
+      !is.na(prelim_status) ~ prelim_status,
+      is.na(prelim_status) & lag(prelim_status, default = NA) == "very active" ~ "rest",
+      TRUE ~ "inactive"
+    ),
+    # make it an ordered factor if you want
+    activity_status = factor(activity_status,
+                             levels = c("very active", "active", "rest", "inactive"),
+                             ordered = TRUE)
+  ) %>%
+  select(-prelim_status)   # drop helper
+
+# ---------------------------
+# 8) (Optional) Recompute normalized z-score if you want to include imputed values
+daily_summary <- daily_summary %>%
+  mutate(
+    sport_exposure_z = ifelse(
+      !is.na(sport_exposure),
+      (sport_exposure - mean(sport_exposure, na.rm = TRUE)) / sd(sport_exposure, na.rm = TRUE),
+      NA_real_
+    )
+  )
+
+# done: daily_summary now contains:
+#  - sport_exposure       (imputed where needed)
+
+#  - had_real_activity    (TRUE/FALSE)
+#  - activity_status      (very active | active | rest | inactive)
+```
+
+Remove undesired columns
+
+```{r}
+data <- full_join(daily_summary, sleep_events, by = "day")
+data <- data %>%
+  dplyr::select(-moderate_activity_time, 
+         -vigorous_activity_time, 
+         -total_sleep, 
+         -deep_sleep, 
+         -light_sleep, 
+         -rem_sleep, 
+         -awake,
+         -sport_exposure_z,
+         -sport_exposure_raw,
+         -n_activities)
+save(data,file = "Project_data.RData")
+```
+
+### Notes / rationale & tuning
+
+-   I used the 75th percentile among *real activity days* as the threshold for **very active**. You can change `probs = 0.75` to another percentile (e.g. `0.80`) or use a fixed numeric threshold if you prefer.
+
+-   The imputation windows are ±10/20/30 days with penalties `1`, `0.5`, `0.25` — i.e., close days contribute fully, more distant days are down-weighted. The global fallback is `10%` of the global mean if nothing is found.
+
+-   `had_real_activity` is computed from the raw joined `sport_exposure_raw` and `n_activities` so we always know whether a day really had recorded activities before imputation.
+
+-   `activity_status` uses the previous day's **prelim status** (i.e., whether the previous day actually had "very active") to determine whether a non-activity day is `rest` vs `inactive`, as you requested.
+
+-   If you prefer “rest” to be triggered by the previous day being *either* "very active" OR "active", change the `lag(prelim_status) == "very active"` condition accordingly.
+
+-   If you want, I can:
+
+-   change the `very_active` threshold to a fixed numeric value (e.g., X seconds\*HR) instead of the 75th pctile, or
+
+-   make the imputation use a smooth distance-weighted average (exponential/Gaussian kernel) instead of discrete windows and penalties — that gives a softer, continuous influence of nearby days.
