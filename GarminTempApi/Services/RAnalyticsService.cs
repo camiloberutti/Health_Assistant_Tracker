@@ -58,13 +58,23 @@ public class RAnalyticsService
 
     private static readonly Dictionary<string, string> VariableGroups = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["Steps"] = "Steps", ["GoalSteps"] = "Steps", ["TotalCalories"] = "Steps",
-        ["ActiveCalories"] = "Steps", ["Distance"] = "Steps",
-        ["SleepScore"] = "Sleep", ["TotalSleep"] = "Sleep", ["DeepSleep"] = "Sleep",
-        ["LightSleep"] = "Sleep", ["RemSleep"] = "Sleep", ["AwakeSecs"] = "Sleep",
-        ["RestingHR"] = "Sleep", ["BodyBatteryChange"] = "Sleep",
-        ["AvgRespiration"] = "Sleep", ["LowestSpO2"] = "Sleep",
-        ["ActivityDuration"] = "Activity", ["ActivityDistance"] = "Activity",
+        ["Steps"] = "Steps",
+        ["GoalSteps"] = "Steps",
+        ["TotalCalories"] = "Steps",
+        ["ActiveCalories"] = "Steps",
+        ["Distance"] = "Steps",
+        ["SleepScore"] = "Sleep",
+        ["TotalSleep"] = "Sleep",
+        ["DeepSleep"] = "Sleep",
+        ["LightSleep"] = "Sleep",
+        ["RemSleep"] = "Sleep",
+        ["AwakeSecs"] = "Sleep",
+        ["RestingHR"] = "Sleep",
+        ["BodyBatteryChange"] = "Sleep",
+        ["AvgRespiration"] = "Sleep",
+        ["LowestSpO2"] = "Sleep",
+        ["ActivityDuration"] = "Activity",
+        ["ActivityDistance"] = "Activity",
     };
 
     /// <summary>
@@ -402,6 +412,9 @@ public class RAnalyticsService
             "PCA" => "pca",
             "EFA" => "efa",
             "CCA" => "cca",
+            "CLUSTER" => "cluster",
+            "REGRESSION" => "regression",
+            "MDS" => "mds",
             _ => "pca"
         };
 
@@ -424,6 +437,23 @@ public class RAnalyticsService
                     ColumnAliases.TryGetValue(v, out var c) ? c : v));
                 args += $" --set2 \"{set2}\"";
             }
+        }
+
+        if (method == "cluster")
+        {
+            args += $" --nclusters {request.NumberOfClusters}";
+            args += $" --linkage {request.LinkageMethod}";
+        }
+
+        if (method == "regression" && !string.IsNullOrEmpty(request.RegressionTarget))
+        {
+            var targetCol = ColumnAliases.TryGetValue(request.RegressionTarget, out var tc) ? tc : request.RegressionTarget;
+            args += $" --target {targetCol}";
+        }
+
+        if (method == "mds")
+        {
+            args += $" --mdsdims {request.MdsDimensions}";
         }
 
         return args;
@@ -554,6 +584,18 @@ public class RAnalyticsService
                     result.XCoefficients = ParseGenericArray(root, "x_coefficients");
                     result.YCoefficients = ParseGenericArray(root, "y_coefficients");
                     break;
+
+                case "CLUSTER":
+                    result.Clustering = ParseClusteringResult(root);
+                    break;
+
+                case "REGRESSION":
+                    result.Regression = ParseRegressionResult(root);
+                    break;
+
+                case "MDS":
+                    result.Mds = ParseMdsResult(root);
+                    break;
             }
 
             return result;
@@ -677,6 +719,85 @@ public class RAnalyticsService
             ColumnsUsed = nr.TryGetProperty("columns_used", out var cu) && cu.ValueKind == JsonValueKind.Array
                 ? cu.EnumerateArray().Select(e => e.GetString() ?? "").ToList()
                 : new List<string>()
+        };
+    }
+
+    // ── Clustering result parser ────────────────────────────────────
+
+    private static ClusteringResult? ParseClusteringResult(JsonElement root)
+    {
+        return new ClusteringResult
+        {
+            HopkinsStatistic = root.TryGetProperty("hopkins_statistic", out var hs) && hs.ValueKind == JsonValueKind.Number ? hs.GetDouble() : 0,
+            HopkinsPValue = root.TryGetProperty("hopkins_pvalue", out var hp) && hp.ValueKind == JsonValueKind.Number ? hp.GetDouble() : 0,
+            ClusteringTendency = root.TryGetProperty("clustering_tendency", out var ct2) && ct2.ValueKind == JsonValueKind.True,
+            K = root.TryGetProperty("k", out var k) ? k.GetInt32() : 3,
+            TotalWithinSS = root.TryGetProperty("total_withinss", out var tw) ? tw.GetDouble() : 0,
+            BetweenSS = root.TryGetProperty("betweenss", out var bs) ? bs.GetDouble() : 0,
+            TotalSS = root.TryGetProperty("totalss", out var ts) ? ts.GetDouble() : 0,
+            WithinSS = ParseDoubleArray(root, "withinss"),
+            ClusterSizes = root.TryGetProperty("cluster_sizes", out var cs) && cs.ValueKind == JsonValueKind.Array
+                ? cs.EnumerateArray().Select(e => e.GetInt32()).ToList() : null,
+            ClusterCenters = ParseGenericArray(root, "cluster_centers"),
+            SilhouetteAvg = root.TryGetProperty("silhouette_avg", out var sa) ? sa.GetDouble() : 0,
+            SilhouettePerPoint = ParseGenericArray(root, "silhouette_per_point"),
+            LinkageMethod = root.TryGetProperty("linkage_method", out var lm) ? lm.GetString() ?? "" : "",
+            DendrogramMerge = ParseGenericArray(root, "dendrogram_merge"),
+            DendrogramHeight = ParseDoubleArray(root, "dendrogram_height"),
+            DendrogramLabels = ParseStringArray(root, "dendrogram_labels"),
+            ElbowWcss = ParseDoubleArray(root, "elbow_wcss"),
+            Assignments = root.TryGetProperty("assignments", out var asg) && asg.ValueKind == JsonValueKind.Array
+                ? asg.EnumerateArray().Select(e => e.GetInt32()).ToList() : null,
+            Points = ParseGenericArray(root, "points"),
+        };
+    }
+
+    // ── Regression result parser ────────────────────────────────────
+
+    private static RegressionResult? ParseRegressionResult(JsonElement root)
+    {
+        var result = new RegressionResult
+        {
+            TargetVariable = root.TryGetProperty("target_variable", out var tv) ? tv.GetString() ?? "" : "",
+            Predictors = ParseStringArray(root, "predictors") ?? new List<string>(),
+            RSquared = root.TryGetProperty("r_squared", out var rs) ? rs.GetDouble() : 0,
+            AdjustedRSquared = root.TryGetProperty("adjusted_r_squared", out var ars) ? ars.GetDouble() : 0,
+            FStatistic = root.TryGetProperty("f_statistic", out var fs) && fs.ValueKind == JsonValueKind.Number ? fs.GetDouble() : 0,
+            FPValue = root.TryGetProperty("f_pvalue", out var fp) && fp.ValueKind == JsonValueKind.Number ? fp.GetDouble() : 1,
+            Residuals = ParseDoubleArray(root, "residuals"),
+            FittedValues = ParseDoubleArray(root, "fitted_values"),
+            ShapiroPValue = root.TryGetProperty("shapiro_pvalue", out var sp) && sp.ValueKind == JsonValueKind.Number ? sp.GetDouble() : 0,
+            ResidualsNormal = root.TryGetProperty("residuals_normal", out var rn) && rn.ValueKind == JsonValueKind.True,
+        };
+
+        // Parse coefficients
+        if (root.TryGetProperty("coefficients", out var coefArr) && coefArr.ValueKind == JsonValueKind.Array)
+        {
+            result.Coefficients = coefArr.EnumerateArray().Select(el => new RegressionCoefficient
+            {
+                Variable = el.TryGetProperty("variable", out var v) ? v.GetString() ?? "" : "",
+                Estimate = el.TryGetProperty("estimate", out var e) ? e.GetDouble() : 0,
+                StdError = el.TryGetProperty("std_error", out var se) ? se.GetDouble() : 0,
+                TValue = el.TryGetProperty("t_value", out var t) ? t.GetDouble() : 0,
+                PValue = el.TryGetProperty("p_value", out var p) ? p.GetDouble() : 1,
+                Significance = el.TryGetProperty("significance", out var sig) ? sig.GetString() ?? "" : "",
+            }).ToList();
+        }
+
+        return result;
+    }
+
+    // ── MDS result parser ───────────────────────────────────────────
+
+    private static MdsResult? ParseMdsResult(JsonElement root)
+    {
+        return new MdsResult
+        {
+            Dimensions = root.TryGetProperty("dimensions", out var d) ? d.GetInt32() : 2,
+            GoF = root.TryGetProperty("gof", out var gof) ? gof.GetDouble() : 0,
+            Eigenvalues = ParseDoubleArray(root, "eigenvalues"),
+            Points = ParseGenericArray(root, "points"),
+            Stress = root.TryGetProperty("stress", out var st) ? st.GetDouble() : 0,
         };
     }
 

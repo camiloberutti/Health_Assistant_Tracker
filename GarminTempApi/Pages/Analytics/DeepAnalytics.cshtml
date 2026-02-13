@@ -7,7 +7,7 @@
 
 <div class="pt-3 pb-2">
     <h1 class="h3 fw-bold mb-0"><i class="bi bi-graph-up-arrow me-2"></i>Deep Analytics</h1>
-    <p class="text-muted mb-0">PCA, Exploratory Factor Analysis &amp; Canonical Correlation on your health data</p>
+    <p class="text-muted mb-0">PCA, EFA, CCA, Clustering, Regression &amp; MDS on your health data</p>
 </div>
 
 <!-- ─── Configuration Card ──────────────────────────────────────── -->
@@ -36,6 +36,9 @@
                             <option value="PCA" selected>PCA – Principal Components</option>
                             <option value="EFA">EFA – Exploratory Factor Analysis</option>
                             <option value="CCA">CCA – Canonical Correlation</option>
+                            <option value="CLUSTER">Clustering – K-Means &amp; Hierarchical</option>
+                            <option value="REGRESSION">Regression – Multiple Linear</option>
+                            <option value="MDS">MDS – Multidimensional Scaling</option>
                         </select>
                     </div>
 
@@ -43,6 +46,40 @@
                     <div class="col-md-3 d-none" id="efaFactorsGroup">
                         <label class="form-label fw-semibold"># Factors</label>
                         <input type="number" class="form-control" id="nFactors" value="5" min="2" max="15" />
+                    </div>
+
+                    <!-- Cluster K (visible only for CLUSTER) -->
+                    <div class="col-md-3 d-none" id="clusterKGroup">
+                        <label class="form-label fw-semibold"># Clusters (K)</label>
+                        <input type="number" class="form-control" id="nClusters" value="3" min="2" max="10" />
+                    </div>
+
+                    <!-- Linkage method (visible only for CLUSTER) -->
+                    <div class="col-md-3 d-none" id="linkageGroup">
+                        <label class="form-label fw-semibold">Linkage</label>
+                        <select class="form-select" id="linkageMethod">
+                            <option value="complete" selected>Complete</option>
+                            <option value="single">Single</option>
+                            <option value="average">Average</option>
+                            <option value="ward.D2">Ward's</option>
+                        </select>
+                    </div>
+
+                    <!-- Regression target (visible only for REGRESSION) -->
+                    <div class="col-md-3 d-none" id="regressionTargetGroup">
+                        <label class="form-label fw-semibold">Target (Y)</label>
+                        <select class="form-select" id="regressionTarget">
+                            <option value="">— select after scanning —</option>
+                        </select>
+                    </div>
+
+                    <!-- MDS dimensions (visible only for MDS) -->
+                    <div class="col-md-3 d-none" id="mdsDimsGroup">
+                        <label class="form-label fw-semibold">Dimensions</label>
+                        <select class="form-select" id="mdsDims">
+                            <option value="2" selected>2D</option>
+                            <option value="3">3D</option>
+                        </select>
                     </div>
                 </div>
 
@@ -54,652 +91,1176 @@
                                 onclick="scanDensity()" title="Scan which variables have data in this range">
                             <i class="bi bi-arrow-clockwise"></i> Scan
                         </button>
-                        <div class="spinner-border spinner-border-sm text-secondary d-none" id="densitySpinner" role="status"></div>
+                        <div class="spinner-border spinner-border-sm text-secondary d-none" id="densitySpinner"
+                             role="status"></div>
                         <small class="text-muted ms-1" id="densityStatus"></small>
                     </div>
                     <div class="mb-2">
                         <label class="form-label small text-muted mb-1">Min data density</label>
                         <div class="d-flex align-items-center gap-2" style="max-width:260px;">
-                            <input type="range" class="form-range" id="densitySlider" min="0" max="100" value="10" step="5"
+                            <input type="range" class="form-range" id="densitySlider" min="0" max="100" value="10"
+                                   step="5"
                                    oninput="document.getElementById('densityLabel').textContent = this.value + '%'" />
                             <span class="badge bg-secondary" id="densityLabel" style="min-width:40px;">10%</span>
                         </div>
                     </div>
                     <div class="d-flex flex-wrap gap-2" id="variableCheckboxes">
-                        <span class="text-muted small"><i class="bi bi-info-circle"></i> Select a date range and click <b>Scan</b> to discover available variables.</span>
-                    </div>
-                </div>
-
-                <!-- CCA Sets (visible only for CCA) -->
-                <div class="d-none mt-3" id="ccaSetsGroup">
-                    <div class="row g-3">
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Set 1 (Predictors)</label>
-                            <div class="d-flex flex-wrap gap-2" id="ccaSet1Checks"></div>
-                        </div>
-                        <div class="col-md-6">
-                            <label class="form-label fw-semibold">Set 2 (Outcomes)</label>
-                            <div class="d-flex flex-wrap gap-2" id="ccaSet2Checks"></div>
+                        <span class="text-muted small"><i class="bi bi-info-circle"></i> Select a date range and click
+                            <b>Scan</b> to discover available variables.</span>
                         </div>
                     </div>
-                </div>
 
-                <div class="mt-3 d-flex gap-2">
-                    <button class="btn btn-primary" id="runBtn" onclick="runAnalysis()">
-                        <i class="bi bi-play-fill me-1"></i> Run Analysis
-                    </button>
-                    <div class="spinner-border spinner-border-sm text-primary d-none align-self-center" id="spinner" role="status"></div>
-                    <span class="text-muted small align-self-center d-none" id="spinnerText">Running R script...</span>
-                </div>
-            </form>
+                    <!-- CCA Sets (visible only for CCA) -->
+                    <div class="d-none mt-3" id="ccaSetsGroup">
+                        <div class="row g-3">
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Set 1 (Predictors)</label>
+                                <div class="d-flex flex-wrap gap-2" id="ccaSet1Checks"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <label class="form-label fw-semibold">Set 2 (Outcomes)</label>
+                                <div class="d-flex flex-wrap gap-2" id="ccaSet2Checks"></div>
+                            </div>
+                        </div>
+                    </div>
+
+                    <div class="mt-3 d-flex gap-2">
+                        <button class="btn btn-primary" id="runBtn" onclick="runAnalysis()">
+                            <i class="bi bi-play-fill me-1"></i> Run Analysis
+                        </button>
+                        <div class="spinner-border spinner-border-sm text-primary d-none align-self-center" id="spinner"
+                             role="status"></div>
+                        <span class="text-muted small align-self-center d-none" id="spinnerText">Running R script...</span>
+                    </div>
+                </form>
+            </div>
         </div>
-    </div>
-</section>
+    </section>
 
-<!-- ─── Error Banner ────────────────────────────────────────────── -->
-<div class="alert alert-danger d-none" id="errorBanner" role="alert"></div>
+    <!-- ─── Error Banner ────────────────────────────────────────────── -->
+    <div class="alert alert-danger d-none" id="errorBanner" role="alert"></div>
 
-<!-- ─── NA Report ───────────────────────────────────────────────── -->
-<div class="alert alert-info d-none" id="naReport" role="alert">
-    <i class="bi bi-info-circle me-1"></i>
-    <strong>Missing Data Report:</strong> <span id="naReportText"></span>
-</div>
-
-<!-- ─── Results Section ─────────────────────────────────────────── -->
-<section id="resultsSection" class="d-none">
-
-    <!-- Method badge -->
-    <div class="d-flex align-items-center gap-2 mb-3">
-        <span class="badge bg-primary fs-6" id="resultMethodBadge"></span>
-        <span class="text-muted" id="resultMeta"></span>
+    <!-- ─── NA Report ───────────────────────────────────────────────── -->
+    <div class="alert alert-info d-none" id="naReport" role="alert">
+        <i class="bi bi-info-circle me-1"></i>
+        <strong>Missing Data Report:</strong> <span id="naReportText"></span>
     </div>
 
-    <!-- PCA Results -->
-    <div id="pcaResults" class="d-none">
-        <div class="row g-4">
-            <!-- Scree / Variance Table -->
-            <div class="col-lg-5">
-                <div class="card shadow-sm border-0 h-100">
-                    <div class="card-body">
-                        <h6 class="card-title">Eigenvalues &amp; Variance Explained</h6>
-                        <table class="table table-sm table-hover" id="pcaTable">
-                            <thead><tr><th>PC</th><th>Eigenvalue</th><th>Var %</th><th>Cum %</th></tr></thead>
+    <!-- ─── Results Section ─────────────────────────────────────────── -->
+    <section id="resultsSection" class="d-none">
+
+        <!-- Method badge -->
+        <div class="d-flex align-items-center gap-2 mb-3">
+            <span class="badge bg-primary fs-6" id="resultMethodBadge"></span>
+            <span class="text-muted" id="resultMeta"></span>
+        </div>
+
+        <!-- PCA Results -->
+        <div id="pcaResults" class="d-none">
+            <div class="row g-4">
+                <!-- Scree / Variance Table -->
+                <div class="col-lg-5">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">Eigenvalues &amp; Variance Explained</h6>
+                            <table class="table table-sm table-hover" id="pcaTable">
+                                <thead>
+                                    <tr>
+                                        <th>PC</th>
+                                        <th>Eigenvalue</th>
+                                        <th>Var %</th>
+                                        <th>Cum %</th>
+                                    </tr>
+                                </thead>
+                                <tbody></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <!-- Scree Plot -->
+                <div class="col-lg-7">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">Scree Plot</h6>
+                            <div id="screePlot" style="width:100%;height:320px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loadings Heatmap -->
+            <div class="card shadow-sm border-0 mt-4">
+                <div class="card-body">
+                    <h6 class="card-title">Loadings Heatmap (first 5 PCs)</h6>
+                    <div id="loadingsHeatmap" style="width:100%;height:400px;"></div>
+                </div>
+            </div>
+
+            <!-- 3D Scatter of Scores -->
+            <div class="card shadow-sm border-0 mt-4">
+                <div class="card-body">
+                    <h6 class="card-title">PCA Score Scatter (PC1 × PC2 × PC3)</h6>
+                    <p class="text-muted small mb-2">Each dot is one day. Colour encodes PC3 value. Hover for details.</p>
+                    <div id="pcaScatter3d" style="width:100%;height:500px;"></div>
+                </div>
+            </div>
+
+            <!-- 2D Cluster Scatter -->
+            <div class="card shadow-sm border-0 mt-4">
+                <div class="card-body">
+                    <h6 class="card-title">PC1 vs PC2 – Day Clusters</h6>
+                    <p class="text-muted small mb-2">Colour represents approximate k-means cluster (k = 3 on PC1–PC3).</p>
+                    <div id="pcaScatter2d" style="width:100%;height:420px;"></div>
+                </div>
+            </div>
+        </div>
+
+        <!-- EFA Results -->
+        <div id="efaResults" class="d-none">
+            <div class="row g-4">
+                <div class="col-lg-4">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">Suitability Tests</h6>
+                            <table class="table table-sm">
+                                <tbody>
+                                    <tr>
+                                        <td>Bartlett χ²</td>
+                                        <td id="efaBartlett"></td>
+                                    </tr>
+                                    <tr>
+                                        <td>Bartlett p-value</td>
+                                        <td id="efaBartlettP"></td>
+                                    </tr>
+                                    <tr>
+                                        <td>KMO (Overall MSA)</td>
+                                        <td id="efaKmo"></td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-8">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">Factor Variance Explained</h6>
+                            <div id="efaBarChart" style="width:100%;height:300px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 mt-4">
+                <div class="card-body">
+                    <h6 class="card-title">Factor Loadings Heatmap</h6>
+                    <div id="efaLoadingsHeatmap" style="width:100%;height:400px;"></div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 mt-4">
+                <div class="card-body">
+                    <h6 class="card-title">Communalities</h6>
+                    <table class="table table-sm table-hover" id="communalityTable">
+                        <thead>
+                            <tr>
+                                <th>Variable</th>
+                                <th>h² (Communality)</th>
+                                <th>u² (Uniqueness)</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- CCA Results -->
+        <div id="ccaResults" class="d-none">
+            <div class="card shadow-sm border-0">
+                <div class="card-body">
+                    <h6 class="card-title">Canonical Correlations</h6>
+                    <table class="table table-sm table-hover" id="ccaDimTable">
+                        <thead>
+                            <tr>
+                                <th>Dimension</th>
+                                <th>Canonical r</th>
+                                <th>r²</th>
+                            </tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="row g-4 mt-2">
+                <div class="col-md-6">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">X Coefficients (Set 1)</h6>
+                            <div id="ccaXCoefPlot" style="width:100%;height:320px;"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">Y Coefficients (Set 2)</h6>
+                            <div id="ccaYCoefPlot" style="width:100%;height:320px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- CLUSTER Results -->
+        <div id="clusterResults" class="d-none">
+            <div class="row g-4">
+                <!-- Clustering Tendency & Quality -->
+                <div class="col-lg-4">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">Clustering Quality</h6>
+                            <table class="table table-sm">
+                                <tbody>
+                                    <tr><td>Hopkins Statistic</td><td id="clHopkins"></td></tr>
+                                    <tr><td>Clustering Tendency</td><td id="clTendency"></td></tr>
+                                    <tr><td>K (clusters)</td><td id="clK"></td></tr>
+                                    <tr><td>Silhouette Avg</td><td id="clSilhouette"></td></tr>
+                                    <tr><td>Between SS / Total SS</td><td id="clBssRatio"></td></tr>
+                                    <tr><td>Linkage Method</td><td id="clLinkage"></td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <!-- Elbow Plot -->
+                <div class="col-lg-8">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">Elbow Method (WCSS)</h6>
+                            <div id="clElbowPlot" style="width:100%;height:300px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Cluster Scatter -->
+            <div class="card shadow-sm border-0 mt-4">
+                <div class="card-body">
+                    <h6 class="card-title">K-Means Cluster Scatter (PCA-projected)</h6>
+                    <p class="text-muted small mb-2">Each dot is one day. Colours show cluster assignment. Data is projected to 2D via PCA for visualization.</p>
+                    <div id="clScatter" style="width:100%;height:480px;"></div>
+                </div>
+            </div>
+
+            <!-- Silhouette Plot -->
+            <div class="card shadow-sm border-0 mt-4">
+                <div class="card-body">
+                    <h6 class="card-title">Silhouette Plot</h6>
+                    <div id="clSilhouettePlot" style="width:100%;height:400px;"></div>
+                </div>
+            </div>
+
+            <!-- Cluster Centers Table -->
+            <div class="card shadow-sm border-0 mt-4">
+                <div class="card-body">
+                    <h6 class="card-title">Cluster Centers (scaled)</h6>
+                    <div class="table-responsive">
+                        <table class="table table-sm table-hover" id="clCentersTable">
+                            <thead><tr></tr></thead>
                             <tbody></tbody>
                         </table>
                     </div>
                 </div>
             </div>
-            <!-- Scree Plot -->
-            <div class="col-lg-7">
-                <div class="card shadow-sm border-0 h-100">
-                    <div class="card-body">
-                        <h6 class="card-title">Scree Plot</h6>
-                        <div id="screePlot" style="width:100%;height:320px;"></div>
+        </div>
+
+        <!-- REGRESSION Results -->
+        <div id="regressionResults" class="d-none">
+            <div class="row g-4">
+                <div class="col-lg-4">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">Model Summary</h6>
+                            <table class="table table-sm">
+                                <tbody>
+                                    <tr><td>Target</td><td id="regTarget" class="fw-bold"></td></tr>
+                                    <tr><td>R²</td><td id="regR2"></td></tr>
+                                    <tr><td>Adjusted R²</td><td id="regAdjR2"></td></tr>
+                                    <tr><td>F-statistic</td><td id="regF"></td></tr>
+                                    <tr><td>F p-value</td><td id="regFP"></td></tr>
+                                    <tr><td>Shapiro p</td><td id="regShapiro"></td></tr>
+                                    <tr><td>Residuals Normal?</td><td id="regNormal"></td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-8">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">Coefficient Significance</h6>
+                            <div id="regCoefPlot" style="width:100%;height:320px;"></div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <div class="card shadow-sm border-0 mt-4">
+                <div class="card-body">
+                    <h6 class="card-title">Coefficients Table</h6>
+                    <table class="table table-sm table-hover" id="regCoefTable">
+                        <thead>
+                            <tr><th>Variable</th><th>Estimate</th><th>Std Error</th><th>t</th><th>p</th><th>Sig</th></tr>
+                        </thead>
+                        <tbody></tbody>
+                    </table>
+                </div>
+            </div>
+
+            <div class="row g-4 mt-2">
+                <div class="col-md-6">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">Actual vs Fitted</h6>
+                            <div id="regFittedPlot" style="width:100%;height:360px;"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">Residual Distribution</h6>
+                            <div id="regResidPlot" style="width:100%;height:360px;"></div>
+                        </div>
                     </div>
                 </div>
             </div>
         </div>
 
-        <!-- Loadings Heatmap -->
-        <div class="card shadow-sm border-0 mt-4">
-            <div class="card-body">
-                <h6 class="card-title">Loadings Heatmap (first 5 PCs)</h6>
-                <div id="loadingsHeatmap" style="width:100%;height:400px;"></div>
-            </div>
-        </div>
-
-        <!-- 3D Scatter of Scores -->
-        <div class="card shadow-sm border-0 mt-4">
-            <div class="card-body">
-                <h6 class="card-title">PCA Score Scatter (PC1 × PC2 × PC3)</h6>
-                <p class="text-muted small mb-2">Each dot is one day. Colour encodes PC3 value. Hover for details.</p>
-                <div id="pcaScatter3d" style="width:100%;height:500px;"></div>
-            </div>
-        </div>
-
-        <!-- 2D Cluster Scatter -->
-        <div class="card shadow-sm border-0 mt-4">
-            <div class="card-body">
-                <h6 class="card-title">PC1 vs PC2 – Day Clusters</h6>
-                <p class="text-muted small mb-2">Colour represents approximate k-means cluster (k = 3 on PC1–PC3).</p>
-                <div id="pcaScatter2d" style="width:100%;height:420px;"></div>
-            </div>
-        </div>
-    </div>
-
-    <!-- EFA Results -->
-    <div id="efaResults" class="d-none">
-        <div class="row g-4">
-            <div class="col-lg-4">
-                <div class="card shadow-sm border-0 h-100">
-                    <div class="card-body">
-                        <h6 class="card-title">Suitability Tests</h6>
-                        <table class="table table-sm">
-                            <tbody>
-                                <tr><td>Bartlett χ²</td><td id="efaBartlett"></td></tr>
-                                <tr><td>Bartlett p-value</td><td id="efaBartlettP"></td></tr>
-                                <tr><td>KMO (Overall MSA)</td><td id="efaKmo"></td></tr>
-                            </tbody>
-                        </table>
+        <!-- MDS Results -->
+        <div id="mdsResults" class="d-none">
+            <div class="row g-4">
+                <div class="col-lg-4">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">MDS Quality</h6>
+                            <table class="table table-sm">
+                                <tbody>
+                                    <tr><td>Dimensions</td><td id="mdsDimsResult"></td></tr>
+                                    <tr><td>Goodness of Fit</td><td id="mdsGoF"></td></tr>
+                                    <tr><td>Stress (Kruskal)</td><td id="mdsStress"></td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-lg-8">
+                    <div class="card shadow-sm border-0 h-100">
+                        <div class="card-body">
+                            <h6 class="card-title">Eigenvalue Scree</h6>
+                            <div id="mdsScreePlot" style="width:100%;height:300px;"></div>
+                        </div>
                     </div>
                 </div>
             </div>
-            <div class="col-lg-8">
-                <div class="card shadow-sm border-0 h-100">
-                    <div class="card-body">
-                        <h6 class="card-title">Factor Variance Explained</h6>
-                        <div id="efaBarChart" style="width:100%;height:300px;"></div>
-                    </div>
+
+            <div class="card shadow-sm border-0 mt-4">
+                <div class="card-body">
+                    <h6 class="card-title">MDS Configuration Map</h6>
+                    <p class="text-muted small mb-2">Each point is one day. Similar days are close together. Hover for date.</p>
+                    <div id="mdsScatter" style="width:100%;height:500px;"></div>
                 </div>
             </div>
         </div>
 
-        <div class="card shadow-sm border-0 mt-4">
-            <div class="card-body">
-                <h6 class="card-title">Factor Loadings Heatmap</h6>
-                <div id="efaLoadingsHeatmap" style="width:100%;height:400px;"></div>
-            </div>
-        </div>
+    </section>
 
-        <div class="card shadow-sm border-0 mt-4">
-            <div class="card-body">
-                <h6 class="card-title">Communalities</h6>
-                <table class="table table-sm table-hover" id="communalityTable">
-                    <thead><tr><th>Variable</th><th>h² (Communality)</th><th>u² (Uniqueness)</th></tr></thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-        </div>
-    </div>
+    @section Scripts {
+        <!-- Plotly.js for interactive charts -->
+        <script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
+        <script>
+            // ── Globals ──────────────────────────────────────────────────────
+            // Density data returned by /api/DeepAnalytics/density
+            let densityData = null;     // full DataDensityResult
+            let availableVars = [];     // keys that passed the threshold
 
-    <!-- CCA Results -->
-    <div id="ccaResults" class="d-none">
-        <div class="card shadow-sm border-0">
-            <div class="card-body">
-                <h6 class="card-title">Canonical Correlations</h6>
-                <table class="table table-sm table-hover" id="ccaDimTable">
-                    <thead><tr><th>Dimension</th><th>Canonical r</th><th>r²</th></tr></thead>
-                    <tbody></tbody>
-                </table>
-            </div>
-        </div>
+            // Default date range: last 90 days
+            const today = new Date();
+            const d90 = new Date(today); d90.setDate(d90.getDate() - 90);
+            document.getElementById('endDate').value = today.toISOString().slice(0, 10);
+            document.getElementById('startDate').value = d90.toISOString().slice(0, 10);
 
-        <div class="row g-4 mt-2">
-            <div class="col-md-6">
-                <div class="card shadow-sm border-0 h-100">
-                    <div class="card-body">
-                        <h6 class="card-title">X Coefficients (Set 1)</h6>
-                        <div id="ccaXCoefPlot" style="width:100%;height:320px;"></div>
-                    </div>
-                </div>
-            </div>
-            <div class="col-md-6">
-                <div class="card shadow-sm border-0 h-100">
-                    <div class="card-body">
-                        <h6 class="card-title">Y Coefficients (Set 2)</h6>
-                        <div id="ccaYCoefPlot" style="width:100%;height:320px;"></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    </div>
+            // Auto-scan when dates change
+            document.getElementById('startDate').addEventListener('change', () => scanDensity());
+            document.getElementById('endDate').addEventListener('change', () => scanDensity());
+            document.getElementById('densitySlider').addEventListener('change', () => {
+            if (densityData) refilterFromCachedDensity();
+            });
 
-</section>
+            // Kick off initial scan
+            document.addEventListener('DOMContentLoaded', () => scanDensity());
 
-@section Scripts {
-<!-- Plotly.js for interactive charts -->
-<script src="https://cdn.plot.ly/plotly-2.27.0.min.js"></script>
-<script>
-// ── Globals ──────────────────────────────────────────────────────
-// Density data returned by /api/DeepAnalytics/density
-let densityData = null;     // full DataDensityResult
-let availableVars = [];     // keys that passed the threshold
+            // ── Density scan ─────────────────────────────────────────────────
+            async function scanDensity() {
+            const spinner = document.getElementById('densitySpinner');
+            const status = document.getElementById('densityStatus');
+            const scanBtn = document.getElementById('scanBtn');
+            spinner.classList.remove('d-none');
+            scanBtn.disabled = true;
+            status.textContent = 'Scanning...';
 
-// Default date range: last 90 days
-const today = new Date();
-const d90 = new Date(today); d90.setDate(d90.getDate() - 90);
-document.getElementById('endDate').value = today.toISOString().slice(0, 10);
-document.getElementById('startDate').value = d90.toISOString().slice(0, 10);
+            const minDensity = parseInt(document.getElementById('densitySlider').value) / 100;
 
-// Auto-scan when dates change
-document.getElementById('startDate').addEventListener('change', () => scanDensity());
-document.getElementById('endDate').addEventListener('change', () => scanDensity());
-document.getElementById('densitySlider').addEventListener('change', () => {
-    if (densityData) refilterFromCachedDensity();
-});
-
-// Kick off initial scan
-document.addEventListener('DOMContentLoaded', () => scanDensity());
-
-// ── Density scan ─────────────────────────────────────────────────
-async function scanDensity() {
-    const spinner = document.getElementById('densitySpinner');
-    const status = document.getElementById('densityStatus');
-    const scanBtn = document.getElementById('scanBtn');
-    spinner.classList.remove('d-none');
-    scanBtn.disabled = true;
-    status.textContent = 'Scanning...';
-
-    const minDensity = parseInt(document.getElementById('densitySlider').value) / 100;
-
-    try {
-        const res = await fetch('/api/DeepAnalytics/density', {
+            try {
+            const res = await fetch('/api/DeepAnalytics/density', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify({
-                startDate: document.getElementById('startDate').value,
-                endDate: document.getElementById('endDate').value,
-                minDensity: minDensity,
+            startDate: document.getElementById('startDate').value,
+            endDate: document.getElementById('endDate').value,
+            minDensity: minDensity,
             }),
-        });
-        densityData = await res.json();
-        refilterFromCachedDensity();
-    } catch (ex) {
-        status.textContent = 'Scan failed: ' + ex.message;
-        densityData = null;
-    } finally {
-        spinner.classList.add('d-none');
-        scanBtn.disabled = false;
-    }
-}
+            });
+            densityData = await res.json();
+            refilterFromCachedDensity();
+            } catch (ex) {
+            status.textContent = 'Scan failed: ' + ex.message;
+            densityData = null;
+            } finally {
+            spinner.classList.add('d-none');
+            scanBtn.disabled = false;
+            }
+            }
 
-function refilterFromCachedDensity() {
-    if (!densityData || !densityData.variables) return;
-    const minDensity = parseInt(document.getElementById('densitySlider').value) / 100;
-    const status = document.getElementById('densityStatus');
+            function refilterFromCachedDensity() {
+            if (!densityData || !densityData.variables) return;
+            const minDensity = parseInt(document.getElementById('densitySlider').value) / 100;
+            const status = document.getElementById('densityStatus');
 
-    // Re-evaluate availability with current slider value
-    for (const v of densityData.variables) {
-        v.available = v.density >= minDensity;
-    }
+            // Re-evaluate availability with current slider value
+            for (const v of densityData.variables) {
+            v.available = v.density >= minDensity;
+            }
 
-    availableVars = densityData.variables.filter(v => v.available).map(v => v.key);
-    const unavailable = densityData.variables.filter(v => !v.available);
+            availableVars = densityData.variables.filter(v => v.available).map(v => v.key);
+            const unavailable = densityData.variables.filter(v => !v.available);
 
-    status.textContent = `${availableVars.length} of ${densityData.variables.length} variables have ≥${Math.round(minDensity * 100)}% data (${densityData.totalDaysInRange} days)`;
+            status.textContent = `${availableVars.length} of ${densityData.variables.length} variables have ≥${Math.round(minDensity * 100)}% data (${densityData.totalDaysInRange} days)`;
 
-    buildDensityCheckboxes('variableCheckboxes', densityData.variables, 'var_');
-    buildDensityCheckboxes('ccaSet1Checks', densityData.variables, 'cca1_');
-    buildDensityCheckboxes('ccaSet2Checks', densityData.variables, 'cca2_');
-}
+            buildDensityCheckboxes('variableCheckboxes', densityData.variables, 'var_');
+            buildDensityCheckboxes('ccaSet1Checks', densityData.variables, 'cca1_');
+            buildDensityCheckboxes('ccaSet2Checks', densityData.variables, 'cca2_');
+            }
 
-// ── Build checkboxes with density badges ─────────────────────────
-function buildDensityCheckboxes(containerId, variables, prefix) {
-    const c = document.getElementById(containerId);
-    c.innerHTML = '';
+            // ── Build checkboxes with density badges ─────────────────────────
+            function buildDensityCheckboxes(containerId, variables, prefix) {
+            const c = document.getElementById(containerId);
+            c.innerHTML = '';
 
-    // Group by category
-    const groups = {};
-    for (const v of variables) {
-        const g = v.group || 'Other';
-        if (!groups[g]) groups[g] = [];
-        groups[g].push(v);
-    }
+            // Group by category
+            const groups = {};
+            for (const v of variables) {
+            const g = v.group || 'Other';
+            if (!groups[g]) groups[g] = [];
+            groups[g].push(v);
+            }
 
-    for (const [group, vars] of Object.entries(groups)) {
-        // Group label
-        const groupLabel = document.createElement('div');
-        groupLabel.className = 'w-100 mt-1 mb-0';
-        groupLabel.innerHTML = `<small class="text-muted fw-bold text-uppercase" style="font-size:.7rem;letter-spacing:.05em">${group}</small>`;
-        c.appendChild(groupLabel);
+            for (const [group, vars] of Object.entries(groups)) {
+            // Group label
+            const groupLabel = document.createElement('div');
+            groupLabel.className = 'w-100 mt-1 mb-0';
+            groupLabel.innerHTML = `<small class="text-muted fw-bold text-uppercase" style="font-size:.7rem;letter-spacing:.05em">${group}</small>`;
+            c.appendChild(groupLabel);
 
-        const row = document.createElement('div');
-        row.className = 'd-flex flex-wrap gap-2 mb-1';
+            const row = document.createElement('div');
+            row.className = 'd-flex flex-wrap gap-2 mb-1';
 
-        for (const v of vars) {
+            for (const v of vars) {
             const id = prefix + v.key;
             const pct = Math.round(v.density * 100);
             const disabled = !v.available;
             const badgeClass = v.available
-                ? (pct >= 70 ? 'bg-success' : 'bg-warning text-dark')
-                : 'bg-danger';
+            ? (pct >= 70 ? 'bg-success' : 'bg-warning text-dark')
+            : 'bg-danger';
 
             const wrapper = document.createElement('div');
             wrapper.className = 'form-check form-check-inline' + (disabled ? ' opacity-50' : '');
             wrapper.innerHTML = `
-                <input class="form-check-input" type="checkbox" value="${v.key}" id="${id}"
-                       ${disabled ? 'disabled' : ''} ${v.available ? 'checked' : ''}>
-                <label class="form-check-label small" for="${id}">
-                    ${v.key} <span class="badge ${badgeClass}" style="font-size:.65rem">${pct}%</span>
-                </label>`;
+            <input class="form-check-input" type="checkbox" value="${v.key}" id="${id}"
+            ${disabled ? 'disabled' : ''} ${v.available ? 'checked' : ''}>
+            <label class="form-check-label small" for="${id}">
+            ${v.key} <span class="badge ${badgeClass}" style="font-size:.65rem">${pct}%</span>
+            </label>`;
             row.appendChild(wrapper);
-        }
-        c.appendChild(row);
-    }
-}
+            }
+            c.appendChild(row);
+            }
+            }
 
-// ── Method toggle ────────────────────────────────────────────────
-document.getElementById('methodSelect').addEventListener('change', function () {
-    const m = this.value;
-    document.getElementById('efaFactorsGroup').classList.toggle('d-none', m !== 'EFA');
-    document.getElementById('ccaSetsGroup').classList.toggle('d-none', m !== 'CCA');
-});
+            // ── Method toggle ────────────────────────────────────────────────
+            document.getElementById('methodSelect').addEventListener('change', function () {
+            const m = this.value;
+            document.getElementById('efaFactorsGroup').classList.toggle('d-none', m !== 'EFA');
+            document.getElementById('ccaSetsGroup').classList.toggle('d-none', m !== 'CCA');
+            document.getElementById('clusterKGroup').classList.toggle('d-none', m !== 'CLUSTER');
+            document.getElementById('linkageGroup').classList.toggle('d-none', m !== 'CLUSTER');
+            document.getElementById('regressionTargetGroup').classList.toggle('d-none', m !== 'REGRESSION');
+            document.getElementById('mdsDimsGroup').classList.toggle('d-none', m !== 'MDS');
 
-// ── Collect checked values ───────────────────────────────────────
-function getChecked(containerId) {
-    return [...document.querySelectorAll(`#${containerId} input:checked`)].map(c => c.value);
-}
+            // Populate regression target dropdown from checked variables
+            if (m === 'REGRESSION') populateRegressionTarget();
+            });
 
-// ── Run ──────────────────────────────────────────────────────────
-async function runAnalysis() {
-    const btn = document.getElementById('runBtn');
-    const spinner = document.getElementById('spinner');
-    const spinnerText = document.getElementById('spinnerText');
-    const errorBanner = document.getElementById('errorBanner');
+            // ── Collect checked values ───────────────────────────────────────
+            function getChecked(containerId) {
+            return [...document.querySelectorAll(`#${containerId} input:checked`)].map(c => c.value);
+            }
 
-    btn.disabled = true;
-    spinner.classList.remove('d-none');
-    spinnerText.classList.remove('d-none');
-    errorBanner.classList.add('d-none');
-    document.getElementById('resultsSection').classList.add('d-none');
-    document.getElementById('naReport').classList.add('d-none');
+            // ── Run ──────────────────────────────────────────────────────────
+            async function runAnalysis() {
+            const btn = document.getElementById('runBtn');
+            const spinner = document.getElementById('spinner');
+            const spinnerText = document.getElementById('spinnerText');
+            const errorBanner = document.getElementById('errorBanner');
 
-    const method = document.getElementById('methodSelect').value;
-    const selectedVars = getChecked('variableCheckboxes');
+            btn.disabled = true;
+            spinner.classList.remove('d-none');
+            spinnerText.classList.remove('d-none');
+            errorBanner.classList.add('d-none');
+            document.getElementById('resultsSection').classList.add('d-none');
+            document.getElementById('naReport').classList.add('d-none');
 
-    // Guard: need at least 2 variables for any multivariate method
-    if (selectedVars.length < 2) {
-        errorBanner.textContent = 'Select at least 2 variables for multivariate analysis.';
-        errorBanner.classList.remove('d-none');
-        btn.disabled = false;
-        spinner.classList.add('d-none');
-        spinnerText.classList.add('d-none');
-        return;
-    }
+            const method = document.getElementById('methodSelect').value;
+            const selectedVars = getChecked('variableCheckboxes');
 
-    const body = {
-        startDate: document.getElementById('startDate').value,
-        endDate:   document.getElementById('endDate').value,
-        method:    method,
-        variables: selectedVars,
-        numberOfFactors: parseInt(document.getElementById('nFactors').value) || 5,
-        ccaSet1: method === 'CCA' ? getChecked('ccaSet1Checks') : [],
-        ccaSet2: method === 'CCA' ? getChecked('ccaSet2Checks') : [],
-    };
+            // Guard: need at least 2 variables for any multivariate method
+            if (selectedVars.length < 2) {
+            errorBanner.textContent = 'Select at least 2 variables for multivariate analysis.';
+            errorBanner.classList.remove('d-none');
+            btn.disabled = false;
+            spinner.classList.add('d-none');
+            spinnerText.classList.add('d-none');
+            return;
+            }
 
-    try {
-        const res = await fetch('/api/DeepAnalytics/run', {
+            const body = {
+            startDate: document.getElementById('startDate').value,
+            endDate: document.getElementById('endDate').value,
+            method: method,
+            variables: selectedVars,
+            numberOfFactors: parseInt(document.getElementById('nFactors').value) || 5,
+            ccaSet1: method === 'CCA' ? getChecked('ccaSet1Checks') : [],
+            ccaSet2: method === 'CCA' ? getChecked('ccaSet2Checks') : [],
+            numberOfClusters: parseInt(document.getElementById('nClusters').value) || 3,
+            linkageMethod: document.getElementById('linkageMethod').value || 'complete',
+            regressionTarget: method === 'REGRESSION' ? document.getElementById('regressionTarget').value : null,
+            mdsDimensions: parseInt(document.getElementById('mdsDims').value) || 2,
+            };
+
+            try {
+            const res = await fetch('/api/DeepAnalytics/run', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
             body: JSON.stringify(body),
-        });
-        const data = await res.json();
+            });
+            const data = await res.json();
 
-        if (!res.ok || data.error) {
+            if (!res.ok || data.error) {
             errorBanner.textContent = data.error || `Server error (${res.status})`;
             errorBanner.classList.remove('d-none');
             return;
-        }
+            }
 
-        renderResults(data);
-    } catch (ex) {
-        errorBanner.textContent = 'Request failed: ' + ex.message;
-        errorBanner.classList.remove('d-none');
-    } finally {
-        btn.disabled = false;
-        spinner.classList.add('d-none');
-        spinnerText.classList.add('d-none');
-    }
-}
+            renderResults(data);
+            } catch (ex) {
+            errorBanner.textContent = 'Request failed: ' + ex.message;
+            errorBanner.classList.remove('d-none');
+            } finally {
+            btn.disabled = false;
+            spinner.classList.add('d-none');
+            spinnerText.classList.add('d-none');
+            }
+            }
 
-// ── Render dispatcher ────────────────────────────────────────────
-function renderResults(data) {
-    document.getElementById('resultsSection').classList.remove('d-none');
-    document.getElementById('resultMethodBadge').textContent = data.method;
-    document.getElementById('resultMeta').textContent =
-        `${data.observations} days × ${data.variableCount} variables`;
+            // ── Render dispatcher ────────────────────────────────────────────
+            function renderResults(data) {
+            document.getElementById('resultsSection').classList.remove('d-none');
+            document.getElementById('resultMethodBadge').textContent = data.method;
+            document.getElementById('resultMeta').textContent =
+            `${data.observations} days × ${data.variableCount} variables`;
 
-    // NA report
-    if (data.naReport && data.naReport.naCellsBefore > 0) {
-        const nr = data.naReport;
-        document.getElementById('naReportText').textContent =
+            // NA report
+            if (data.naReport && data.naReport.naCellsBefore > 0) {
+            const nr = data.naReport;
+            document.getElementById('naReportText').textContent =
             `${nr.naCellsBefore} missing values found (${nr.rowsBefore} rows). ` +
             `After median imputation: ${nr.naCellsAfter} NAs remain, ${nr.rowsAfter} rows used. ` +
             `Columns: ${nr.columnsUsed.join(', ')}`;
-        document.getElementById('naReport').classList.remove('d-none');
-    }
+            document.getElementById('naReport').classList.remove('d-none');
+            }
 
-    // Hide all result panels
-    ['pcaResults', 'efaResults', 'ccaResults'].forEach(id =>
-        document.getElementById(id).classList.add('d-none'));
+            // Hide all result panels
+            ['pcaResults', 'efaResults', 'ccaResults', 'clusterResults', 'regressionResults', 'mdsResults'].forEach(id =>
+            document.getElementById(id).classList.add('d-none'));
 
-    switch (data.method) {
-        case 'PCA': renderPCA(data); break;
-        case 'EFA': renderEFA(data); break;
-        case 'CCA': renderCCA(data); break;
-    }
-}
+            switch (data.method) {
+            case 'PCA': renderPCA(data); break;
+            case 'EFA': renderEFA(data); break;
+            case 'CCA': renderCCA(data); break;
+            case 'CLUSTER': renderCluster(data); break;
+            case 'REGRESSION': renderRegression(data); break;
+            case 'MDS': renderMDS(data); break;
+            }
+            }
 
-// ══════════════════════════════════════════════════════════════════
-// PCA Rendering
-// ══════════════════════════════════════════════════════════════════
-function renderPCA(data) {
-    document.getElementById('pcaResults').classList.remove('d-none');
+            // ── Helper: Populate regression target dropdown ──────────────────
+            function populateRegressionTarget() {
+                const sel = document.getElementById('regressionTarget');
+                sel.innerHTML = '<option value="">— select target —</option>';
+                const checked = getChecked('variableCheckboxes');
+                for (const v of checked) {
+                    sel.innerHTML += `<option value="${v}">${v}</option>`;
+                }
+            }
 
-    // Table
-    const tbody = document.querySelector('#pcaTable tbody');
-    tbody.innerHTML = '';
-    for (const c of data.components) {
-        const cls = c.eigenvalue >= 1 ? 'fw-bold' : '';
-        tbody.innerHTML += `<tr class="${cls}">
-          <td>${c.name}</td><td>${c.eigenvalue.toFixed(2)}</td>
-          <td>${c.variancePct.toFixed(1)}%</td><td>${c.cumulativePct.toFixed(1)}%</td></tr>`;
-    }
+            // ══════════════════════════════════════════════════════════════════
+            // PCA Rendering
+            // ══════════════════════════════════════════════════════════════════
+            function renderPCA(data) {
+            document.getElementById('pcaResults').classList.remove('d-none');
 
-    // Scree plot
-    const pcNames = data.components.map(c => c.name);
-    const eigenvals = data.components.map(c => c.eigenvalue);
-    const cumPct = data.components.map(c => c.cumulativePct);
+            // Table
+            const tbody = document.querySelector('#pcaTable tbody');
+            tbody.innerHTML = '';
+            for (const c of data.components) {
+            const cls = c.eigenvalue >= 1 ? 'fw-bold' : '';
+            tbody.innerHTML += `<tr class="${cls}">
+            <td>${c.name}</td><td>${c.eigenvalue.toFixed(2)}</td>
+            <td>${c.variancePct.toFixed(1)}%</td><td>${c.cumulativePct.toFixed(1)}%</td></tr>`;
+            }
 
-    Plotly.newPlot('screePlot', [
-        { x: pcNames, y: eigenvals, type: 'bar', name: 'Eigenvalue',
-          marker: { color: 'rgba(55,128,191,0.7)' } },
-        { x: pcNames, y: cumPct, type: 'scatter', mode: 'lines+markers',
-          name: 'Cumulative %', yaxis: 'y2',
-          line: { color: 'rgba(219,64,82,0.9)', width: 2 } },
-    ], {
-        yaxis: { title: 'Eigenvalue' },
-        yaxis2: { title: 'Cumulative %', overlaying: 'y', side: 'right', range: [0, 105] },
-        legend: { x: 0.7, y: 1.1, orientation: 'h' },
-        margin: { t: 20, r: 60 },
-    }, { responsive: true });
+            // Scree plot
+            const pcNames = data.components.map(c => c.name);
+            const eigenvals = data.components.map(c => c.eigenvalue);
+            const cumPct = data.components.map(c => c.cumulativePct);
 
-    // Loadings heatmap
-    if (data.loadings && data.loadings.length > 0) {
-        const vars = data.loadings.map(l => l.variable);
-        const pcCols = Object.keys(data.loadings[0]).filter(k => k.startsWith('PC'));
-        const maxPc = Math.min(pcCols.length, 5);
-        const usePcs = pcCols.slice(0, maxPc);
-        const z = data.loadings.map(l => usePcs.map(pc => l[pc] || 0));
+            Plotly.newPlot('screePlot', [
+            {
+            x: pcNames, y: eigenvals, type: 'bar', name: 'Eigenvalue',
+            marker: { color: 'rgba(55,128,191,0.7)' }
+            },
+            {
+            x: pcNames, y: cumPct, type: 'scatter', mode: 'lines+markers',
+            name: 'Cumulative %', yaxis: 'y2',
+            line: { color: 'rgba(219,64,82,0.9)', width: 2 }
+            },
+            ], {
+            yaxis: { title: 'Eigenvalue' },
+            yaxis2: { title: 'Cumulative %', overlaying: 'y', side: 'right', range: [0, 105] },
+            legend: { x: 0.7, y: 1.1, orientation: 'h' },
+            margin: { t: 20, r: 60 },
+            }, { responsive: true });
 
-        Plotly.newPlot('loadingsHeatmap', [{
+            // Loadings heatmap
+            if (data.loadings && data.loadings.length > 0) {
+            const vars = data.loadings.map(l => l.variable);
+            const pcCols = Object.keys(data.loadings[0]).filter(k => k.startsWith('PC'));
+            const maxPc = Math.min(pcCols.length, 5);
+            const usePcs = pcCols.slice(0, maxPc);
+            const z = data.loadings.map(l => usePcs.map(pc => l[pc] || 0));
+
+            Plotly.newPlot('loadingsHeatmap', [{
             z: z, x: usePcs, y: vars, type: 'heatmap',
             colorscale: 'RdBu', zmid: 0,
             hovertemplate: '%{y} → %{x}: %{z:.3f}<extra></extra>',
-        }], {
+            }], {
             margin: { l: 140, t: 20 },
-        }, { responsive: true });
-    }
+            }, { responsive: true });
+            }
 
-    // 3D Scatter
-    if (data.scores && data.scores.length > 0) {
-        const pc1 = data.scores.map(s => s['PC1'] || 0);
-        const pc2 = data.scores.map(s => s['PC2'] || 0);
-        const pc3 = data.scores.map(s => s['PC3'] || 0);
-        const dates = data.scores.map(s => s.date || `Day ${s.row_index}`);
+            // 3D Scatter
+            if (data.scores && data.scores.length > 0) {
+            const pc1 = data.scores.map(s => s['PC1'] || 0);
+            const pc2 = data.scores.map(s => s['PC2'] || 0);
+            const pc3 = data.scores.map(s => s['PC3'] || 0);
+            const dates = data.scores.map(s => s.date || `Day ${s.row_index}`);
 
-        // Simple k-means (k=3) on PC1-PC3 for colouring
-        const clusters = simpleKMeans(pc1, pc2, pc3, 3);
-        const clusterColors = ['#636EFA', '#EF553B', '#00CC96'];
+            // Simple k-means (k=3) on PC1-PC3 for colouring
+            const clusters = simpleKMeans(pc1, pc2, pc3, 3);
+            const clusterColors = ['#636EFA', '#EF553B', '#00CC96'];
 
-        Plotly.newPlot('pcaScatter3d', [{
+            Plotly.newPlot('pcaScatter3d', [{
             x: pc1, y: pc2, z: pc3,
             mode: 'markers', type: 'scatter3d',
             marker: { size: 4, color: clusters.map(c => clusterColors[c]), opacity: 0.75 },
             text: dates.map((d, i) => `${d}<br>Cluster ${clusters[i] + 1}`),
             hovertemplate: '%{text}<br>PC1=%{x:.2f}<br>PC2=%{y:.2f}<br>PC3=%{z:.2f}<extra></extra>',
-        }], {
+            }], {
             scene: {
-                xaxis: { title: 'PC1 (Recovery ↔ Stress)' },
-                yaxis: { title: 'PC2 (High Intensity)' },
-                zaxis: { title: 'PC3 (Step Volume ↔ Sport)' },
+            xaxis: { title: 'PC1 (Recovery ↔ Stress)' },
+            yaxis: { title: 'PC2 (High Intensity)' },
+            zaxis: { title: 'PC3 (Step Volume ↔ Sport)' },
             },
             margin: { t: 20 },
-        }, { responsive: true });
+            }, { responsive: true });
 
-        // 2D scatter with cluster colours
-        Plotly.newPlot('pcaScatter2d',
+            // 2D scatter with cluster colours
+            Plotly.newPlot('pcaScatter2d',
             [0, 1, 2].map(k => ({
-                x: pc1.filter((_, i) => clusters[i] === k),
-                y: pc2.filter((_, i) => clusters[i] === k),
-                text: dates.filter((_, i) => clusters[i] === k),
-                mode: 'markers', type: 'scatter', name: `Cluster ${k + 1}`,
-                marker: { size: 7, color: clusterColors[k], opacity: 0.7 },
-                hovertemplate: '%{text}<br>PC1=%{x:.2f}<br>PC2=%{y:.2f}<extra></extra>',
+            x: pc1.filter((_, i) => clusters[i] === k),
+            y: pc2.filter((_, i) => clusters[i] === k),
+            text: dates.filter((_, i) => clusters[i] === k),
+            mode: 'markers', type: 'scatter', name: `Cluster ${k + 1}`,
+            marker: { size: 7, color: clusterColors[k], opacity: 0.7 },
+            hovertemplate: '%{text}<br>PC1=%{x:.2f}<br>PC2=%{y:.2f}<extra></extra>',
             })),
             {
-                xaxis: { title: 'PC1 (Recovery ↔ Stress)' },
-                yaxis: { title: 'PC2 (High Intensity)' },
-                margin: { t: 20 },
+            xaxis: { title: 'PC1 (Recovery ↔ Stress)' },
+            yaxis: { title: 'PC2 (High Intensity)' },
+            margin: { t: 20 },
             }, { responsive: true }
-        );
-    }
-}
+            );
+            }
+            }
 
-// ══════════════════════════════════════════════════════════════════
-// EFA Rendering
-// ══════════════════════════════════════════════════════════════════
-function renderEFA(data) {
-    document.getElementById('efaResults').classList.remove('d-none');
+            // ══════════════════════════════════════════════════════════════════
+            // EFA Rendering
+            // ══════════════════════════════════════════════════════════════════
+            function renderEFA(data) {
+            document.getElementById('efaResults').classList.remove('d-none');
 
-    document.getElementById('efaBartlett').textContent = data.bartlettChiSq?.toFixed(1) ?? '–';
-    document.getElementById('efaBartlettP').textContent =
-        data.bartlettPValue != null ? data.bartlettPValue.toExponential(2) : '–';
-    document.getElementById('efaKmo').textContent = data.kmoOverall?.toFixed(3) ?? '–';
+            document.getElementById('efaBartlett').textContent = data.bartlettChiSq?.toFixed(1) ?? '–';
+            document.getElementById('efaBartlettP').textContent =
+            data.bartlettPValue != null ? data.bartlettPValue.toExponential(2) : '–';
+            document.getElementById('efaKmo').textContent = data.kmoOverall?.toFixed(3) ?? '–';
 
-    // Bar chart of factor variance
-    if (data.factors) {
-        Plotly.newPlot('efaBarChart', [{
+            // Bar chart of factor variance
+            if (data.factors) {
+            Plotly.newPlot('efaBarChart', [{
             x: data.factors.map(f => f.factor),
             y: data.factors.map(f => f.variancePct),
             type: 'bar',
             marker: { color: 'rgba(55,128,191,0.7)' },
             text: data.factors.map(f => f.variancePct.toFixed(1) + '%'),
             textposition: 'outside',
-        }], {
+            }], {
             yaxis: { title: 'Variance Explained (%)' },
             margin: { t: 20 },
-        }, { responsive: true });
-    }
+            }, { responsive: true });
+            }
 
-    // Loadings heatmap
-    if (data.loadings && data.loadings.length > 0) {
-        const vars = data.loadings.map(l => l.variable);
-        const factCols = Object.keys(data.loadings[0]).filter(k => k.startsWith('PA') || k.startsWith('Factor'));
-        const z = data.loadings.map(l => factCols.map(f => l[f] || 0));
+            // Loadings heatmap
+            if (data.loadings && data.loadings.length > 0) {
+            const vars = data.loadings.map(l => l.variable);
+            const factCols = Object.keys(data.loadings[0]).filter(k => k.startsWith('PA') || k.startsWith('Factor'));
+            const z = data.loadings.map(l => factCols.map(f => l[f] || 0));
 
-        Plotly.newPlot('efaLoadingsHeatmap', [{
+            Plotly.newPlot('efaLoadingsHeatmap', [{
             z: z, x: factCols, y: vars, type: 'heatmap',
             colorscale: 'RdBu', zmid: 0,
             hovertemplate: '%{y} → %{x}: %{z:.3f}<extra></extra>',
-        }], {
+            }], {
             margin: { l: 140, t: 20 },
-        }, { responsive: true });
-    }
+            }, { responsive: true });
+            }
 
-    // Communality table
-    if (data.communalities) {
-        const tbody = document.querySelector('#communalityTable tbody');
-        tbody.innerHTML = '';
-        for (const c of data.communalities) {
+            // Communality table
+            if (data.communalities) {
+            const tbody = document.querySelector('#communalityTable tbody');
+            tbody.innerHTML = '';
+            for (const c of data.communalities) {
             const cls = c.communality >= 0.5 ? '' : 'text-danger';
             tbody.innerHTML += `<tr>
-              <td>${c.variable}</td>
-              <td class="${cls}">${c.communality.toFixed(3)}</td>
-              <td>${c.uniqueness.toFixed(3)}</td></tr>`;
-        }
-    }
-}
+            <td>${c.variable}</td>
+            <td class="${cls}">${c.communality.toFixed(3)}</td>
+            <td>${c.uniqueness.toFixed(3)}</td></tr>`;
+            }
+            }
+            }
 
-// ══════════════════════════════════════════════════════════════════
-// CCA Rendering
-// ══════════════════════════════════════════════════════════════════
-function renderCCA(data) {
-    document.getElementById('ccaResults').classList.remove('d-none');
+            // ══════════════════════════════════════════════════════════════════
+            // CCA Rendering
+            // ══════════════════════════════════════════════════════════════════
+            function renderCCA(data) {
+            document.getElementById('ccaResults').classList.remove('d-none');
 
-    const tbody = document.querySelector('#ccaDimTable tbody');
-    tbody.innerHTML = '';
-    if (data.dimensions) {
-        for (const d of data.dimensions) {
+            const tbody = document.querySelector('#ccaDimTable tbody');
+            tbody.innerHTML = '';
+            if (data.dimensions) {
+            for (const d of data.dimensions) {
             const cls = d.canonicalCorr >= 0.3 ? 'fw-bold' : '';
             tbody.innerHTML += `<tr class="${cls}">
-              <td>${d.dimension}</td>
-              <td>${d.canonicalCorr.toFixed(4)}</td>
-              <td>${d.canonicalCorrSq.toFixed(4)}</td></tr>`;
-        }
-    }
+            <td>${d.dimension}</td>
+            <td>${d.canonicalCorr.toFixed(4)}</td>
+            <td>${d.canonicalCorrSq.toFixed(4)}</td></tr>`;
+            }
+            }
 
-    // Coefficient bar charts
-    plotCoefficients('ccaXCoefPlot', data.xCoefficients, 'Set 1');
-    plotCoefficients('ccaYCoefPlot', data.yCoefficients, 'Set 2');
-}
+            // Coefficient bar charts
+            plotCoefficients('ccaXCoefPlot', data.xCoefficients, 'Set 1');
+            plotCoefficients('ccaYCoefPlot', data.yCoefficients, 'Set 2');
+            }
 
-function plotCoefficients(divId, coefficients, label) {
-    if (!coefficients || coefficients.length === 0) return;
-    const vars = coefficients.map(c => c.variable);
-    // Use first canonical variate column
-    const cols = Object.keys(coefficients[0]).filter(k => k !== 'variable');
-    const firstCol = cols[0] || 'V1';
+            function plotCoefficients(divId, coefficients, label) {
+            if (!coefficients || coefficients.length === 0) return;
+            const vars = coefficients.map(c => c.variable);
+            // Use first canonical variate column
+            const cols = Object.keys(coefficients[0]).filter(k => k !== 'variable');
+            const firstCol = cols[0] || 'V1';
 
-    Plotly.newPlot(divId, [{
-        y: vars, x: coefficients.map(c => c[firstCol] || 0),
-        type: 'bar', orientation: 'h', name: label,
-        marker: { color: 'rgba(55,128,191,0.7)' },
-    }], {
-        xaxis: { title: `Coefficient (${firstCol})` },
-        margin: { l: 130, t: 20 },
-    }, { responsive: true });
-}
+            Plotly.newPlot(divId, [{
+            y: vars, x: coefficients.map(c => c[firstCol] || 0),
+            type: 'bar', orientation: 'h', name: label,
+            marker: { color: 'rgba(55,128,191,0.7)' },
+            }], {
+            xaxis: { title: `Coefficient (${firstCol})` },
+            margin: { l: 130, t: 20 },
+            }, { responsive: true });
+            }
 
-// ══════════════════════════════════════════════════════════════════
-// Simple k-means for client-side cluster colouring (k=3, 20 iters)
-// ══════════════════════════════════════════════════════════════════
-function simpleKMeans(x, y, z, k) {
-    const n = x.length;
-    // Random init
-    let centroids = [];
-    const used = new Set();
-    while (centroids.length < k) {
-        const idx = Math.floor(Math.random() * n);
-        if (!used.has(idx)) {
+            // ══════════════════════════════════════════════════════════════════
+            // CLUSTER Rendering
+            // ══════════════════════════════════════════════════════════════════
+            function renderCluster(data) {
+            document.getElementById('clusterResults').classList.remove('d-none');
+            const cl = data.clustering;
+
+            // Quality table
+            document.getElementById('clHopkins').textContent = cl.hopkinsStatistic?.toFixed(4) ?? '–';
+            document.getElementById('clTendency').innerHTML = cl.clusteringTendency
+                ? '<span class="badge bg-success">Yes</span>'
+                : '<span class="badge bg-warning text-dark">Weak</span>';
+            document.getElementById('clK').textContent = cl.k;
+            document.getElementById('clSilhouette').textContent = cl.silhouetteAvg?.toFixed(4) ?? '–';
+            const bssRatio = cl.totalSS > 0 ? ((cl.betweenSS / cl.totalSS) * 100).toFixed(1) + '%' : '–';
+            document.getElementById('clBssRatio').textContent = bssRatio;
+            document.getElementById('clLinkage').textContent = cl.linkageMethod;
+
+            // Elbow plot
+            if (cl.elbowWcss) {
+                Plotly.newPlot('clElbowPlot', [{
+                    x: cl.elbowWcss.map((_, i) => i + 1),
+                    y: cl.elbowWcss,
+                    type: 'scatter', mode: 'lines+markers',
+                    marker: { size: 8, color: 'rgba(55,128,191,0.8)' },
+                    line: { width: 2 },
+                }], {
+                    xaxis: { title: 'Number of Clusters (K)', dtick: 1 },
+                    yaxis: { title: 'Total Within-Cluster SS' },
+                    margin: { t: 20 },
+                    shapes: [{
+                        type: 'line', x0: cl.k, x1: cl.k, y0: 0, y1: 1, yref: 'paper',
+                        line: { color: 'red', width: 2, dash: 'dash' }
+                    }],
+                    annotations: [{
+                        x: cl.k, y: cl.elbowWcss[cl.k - 1] || 0,
+                        text: `K=${cl.k}`, showarrow: true, arrowhead: 2,
+                        ax: 40, ay: -30, font: { color: 'red' }
+                    }]
+                }, { responsive: true });
+            }
+
+            // Cluster scatter: PCA-project the points into 2D for viz
+            if (cl.points && cl.points.length > 0) {
+                const skipCols = new Set(['date', 'km_cluster', 'hc_cluster', 'row_index']);
+                const numCols = Object.keys(cl.points[0]).filter(k => !skipCols.has(k) && typeof cl.points[0][k] === 'number');
+                const matrix = cl.points.map(p => numCols.map(c => p[c] || 0));
+                const pca2d = simplePCA2D(matrix);
+
+                const clusterColors = ['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A',
+                                        '#19D3F3', '#FF6692', '#B6E880', '#FF97FF', '#FECB52'];
+                const clusters = cl.assignments || cl.points.map(p => p.km_cluster);
+                const dates = cl.points.map(p => p.date || '');
+
+                const traces = [];
+                const uniqueK = [...new Set(clusters)].sort((a, b) => a - b);
+                for (const k of uniqueK) {
+                    const idx = clusters.map((c, i) => c === k ? i : -1).filter(i => i >= 0);
+                    traces.push({
+                        x: idx.map(i => pca2d[i][0]),
+                        y: idx.map(i => pca2d[i][1]),
+                        text: idx.map(i => dates[i] || `Day ${i + 1}`),
+                        mode: 'markers', type: 'scatter',
+                        name: `Cluster ${k}`,
+                        marker: { size: 7, color: clusterColors[(k - 1) % clusterColors.length], opacity: 0.8 },
+                        hovertemplate: '%{text}<br>PC1=%{x:.2f}<br>PC2=%{y:.2f}<extra></extra>',
+                    });
+                }
+                Plotly.newPlot('clScatter', traces, {
+                    xaxis: { title: 'PC1 (projected)' },
+                    yaxis: { title: 'PC2 (projected)' },
+                    margin: { t: 20 },
+                }, { responsive: true });
+            }
+
+            // Silhouette plot
+            if (cl.silhouettePerPoint && cl.silhouettePerPoint.length > 0) {
+                const sorted = [...cl.silhouettePerPoint].sort((a, b) => {
+                    if (a.cluster !== b.cluster) return a.cluster - b.cluster;
+                    return b.sil_width - a.sil_width;
+                });
+                const clusterColors = ['#636EFA', '#EF553B', '#00CC96', '#AB63FA', '#FFA15A',
+                                        '#19D3F3', '#FF6692', '#B6E880', '#FF97FF', '#FECB52'];
+                Plotly.newPlot('clSilhouettePlot', [{
+                    y: sorted.map((_, i) => i),
+                    x: sorted.map(s => s.sil_width),
+                    type: 'bar', orientation: 'h',
+                    marker: { color: sorted.map(s => clusterColors[(s.cluster - 1) % clusterColors.length]) },
+                    hovertemplate: 'Cluster %{customdata}<br>Silhouette: %{x:.3f}<extra></extra>',
+                    customdata: sorted.map(s => s.cluster),
+                }], {
+                    xaxis: { title: 'Silhouette Width', range: [-0.5, 1] },
+                    yaxis: { visible: false },
+                    margin: { l: 30, t: 20 },
+                    shapes: [{
+                        type: 'line', x0: cl.silhouetteAvg, x1: cl.silhouetteAvg,
+                        y0: 0, y1: 1, yref: 'paper',
+                        line: { color: 'red', width: 2, dash: 'dash' }
+                    }]
+                }, { responsive: true });
+            }
+
+            // Cluster centers table
+            if (cl.clusterCenters && cl.clusterCenters.length > 0) {
+                const cols = Object.keys(cl.clusterCenters[0]).filter(k => k !== 'cluster');
+                const thead = document.querySelector('#clCentersTable thead tr');
+                thead.innerHTML = '<th>Cluster</th>' + cols.map(c => `<th>${c}</th>`).join('');
+                const tbody = document.querySelector('#clCentersTable tbody');
+                tbody.innerHTML = '';
+                for (const center of cl.clusterCenters) {
+                    tbody.innerHTML += `<tr><td class="fw-bold">${center.cluster}</td>`
+                        + cols.map(c => `<td>${typeof center[c] === 'number' ? center[c].toFixed(3) : center[c]}</td>`).join('')
+                        + '</tr>';
+                }
+            }
+            }
+
+            // ══════════════════════════════════════════════════════════════════
+            // REGRESSION Rendering
+            // ══════════════════════════════════════════════════════════════════
+            function renderRegression(data) {
+            document.getElementById('regressionResults').classList.remove('d-none');
+            const reg = data.regression;
+
+            document.getElementById('regTarget').textContent = reg.targetVariable;
+            document.getElementById('regR2').textContent = reg.rSquared?.toFixed(4) ?? '–';
+            document.getElementById('regAdjR2').textContent = reg.adjustedRSquared?.toFixed(4) ?? '–';
+            document.getElementById('regF').textContent = reg.fStatistic?.toFixed(2) ?? '–';
+            document.getElementById('regFP').textContent = reg.fPValue != null ? reg.fPValue.toExponential(3) : '–';
+            document.getElementById('regShapiro').textContent = reg.shapiroPValue?.toFixed(4) ?? '–';
+            document.getElementById('regNormal').innerHTML = reg.residualsNormal
+                ? '<span class="badge bg-success">Yes (p > 0.05)</span>'
+                : '<span class="badge bg-warning text-dark">No</span>';
+
+            // Coefficient bar chart
+            if (reg.coefficients) {
+                const nonIntercept = reg.coefficients.filter(c => c.variable !== '(Intercept)');
+                const colors = nonIntercept.map(c => c.pValue < 0.05 ? '#00CC96' : (c.pValue < 0.1 ? '#FFA15A' : '#EF553B'));
+                Plotly.newPlot('regCoefPlot', [{
+                    y: nonIntercept.map(c => c.variable),
+                    x: nonIntercept.map(c => c.estimate),
+                    type: 'bar', orientation: 'h',
+                    marker: { color: colors },
+                    text: nonIntercept.map(c => c.significance),
+                    textposition: 'auto',
+                    hovertemplate: '%{y}: β=%{x:.4f}<extra></extra>',
+                }], {
+                    xaxis: { title: 'Coefficient (β)' },
+                    margin: { l: 130, t: 20 },
+                }, { responsive: true });
+
+                // Table
+                const tbody = document.querySelector('#regCoefTable tbody');
+                tbody.innerHTML = '';
+                for (const c of reg.coefficients) {
+                    const cls = c.pValue < 0.05 ? 'table-success' : (c.pValue < 0.1 ? 'table-warning' : '');
+                    tbody.innerHTML += `<tr class="${cls}">
+                        <td>${c.variable}</td>
+                        <td>${c.estimate.toFixed(4)}</td>
+                        <td>${c.stdError.toFixed(4)}</td>
+                        <td>${c.tValue.toFixed(3)}</td>
+                        <td>${c.pValue < 0.001 ? c.pValue.toExponential(2) : c.pValue.toFixed(4)}</td>
+                        <td>${c.significance}</td></tr>`;
+                }
+            }
+
+            // Actual vs Fitted
+            if (reg.fittedValues && reg.residuals) {
+                const actual = reg.fittedValues.map((f, i) => f + reg.residuals[i]);
+                Plotly.newPlot('regFittedPlot', [
+                    {
+                        x: actual, y: reg.fittedValues,
+                        mode: 'markers', type: 'scatter', name: 'Observations',
+                        marker: { size: 6, color: '#636EFA', opacity: 0.6 },
+                        hovertemplate: 'Actual: %{x:.2f}<br>Fitted: %{y:.2f}<extra></extra>',
+                    },
+                    {
+                        x: [Math.min(...actual), Math.max(...actual)],
+                        y: [Math.min(...actual), Math.max(...actual)],
+                        mode: 'lines', type: 'scatter', name: 'Perfect fit',
+                        line: { color: 'red', dash: 'dash', width: 1.5 },
+                    }
+                ], {
+                    xaxis: { title: 'Actual' },
+                    yaxis: { title: 'Fitted' },
+                    margin: { t: 20 },
+                }, { responsive: true });
+
+                // Residual histogram
+                Plotly.newPlot('regResidPlot', [{
+                    x: reg.residuals, type: 'histogram',
+                    marker: { color: 'rgba(55,128,191,0.6)' },
+                    nbinsx: 25,
+                }], {
+                    xaxis: { title: 'Residual' },
+                    yaxis: { title: 'Count' },
+                    margin: { t: 20 },
+                }, { responsive: true });
+            }
+            }
+
+            // ══════════════════════════════════════════════════════════════════
+            // MDS Rendering
+            // ══════════════════════════════════════════════════════════════════
+            function renderMDS(data) {
+            document.getElementById('mdsResults').classList.remove('d-none');
+            const mds = data.mds;
+
+            document.getElementById('mdsDimsResult').textContent = mds.dimensions;
+            document.getElementById('mdsGoF').textContent = (mds.goF * 100).toFixed(1) + '%';
+            const stressLabel = mds.stress < 0.05 ? 'Excellent' : (mds.stress < 0.1 ? 'Good' : (mds.stress < 0.2 ? 'Fair' : 'Poor'));
+            document.getElementById('mdsStress').textContent = mds.stress.toFixed(4) + ` (${stressLabel})`;
+
+            // Eigenvalue scree
+            if (mds.eigenvalues) {
+                Plotly.newPlot('mdsScreePlot', [{
+                    x: mds.eigenvalues.map((_, i) => i + 1),
+                    y: mds.eigenvalues,
+                    type: 'bar',
+                    marker: { color: mds.eigenvalues.map((_, i) => i < mds.dimensions ? '#636EFA' : '#ddd') },
+                }], {
+                    xaxis: { title: 'Dimension', dtick: 1 },
+                    yaxis: { title: 'Eigenvalue' },
+                    margin: { t: 20 },
+                }, { responsive: true });
+            }
+
+            // MDS scatter
+            if (mds.points && mds.points.length > 0) {
+                const dates = mds.points.map(p => p.date || `Day ${p.row_index}`);
+                if (mds.dimensions >= 3 && mds.points[0]['Dim3'] !== undefined) {
+                    Plotly.newPlot('mdsScatter', [{
+                        x: mds.points.map(p => p['Dim1']),
+                        y: mds.points.map(p => p['Dim2']),
+                        z: mds.points.map(p => p['Dim3']),
+                        text: dates,
+                        mode: 'markers', type: 'scatter3d',
+                        marker: { size: 4, color: mds.points.map(p => p['Dim1']), colorscale: 'Viridis', opacity: 0.7 },
+                        hovertemplate: '%{text}<br>Dim1=%{x:.2f}<br>Dim2=%{y:.2f}<br>Dim3=%{z:.2f}<extra></extra>',
+                    }], {
+                        scene: { xaxis: { title: 'Dim 1' }, yaxis: { title: 'Dim 2' }, zaxis: { title: 'Dim 3' } },
+                        margin: { t: 20 },
+                    }, { responsive: true });
+                } else {
+                    Plotly.newPlot('mdsScatter', [{
+                        x: mds.points.map(p => p['Dim1']),
+                        y: mds.points.map(p => p['Dim2']),
+                        text: dates,
+                        mode: 'markers', type: 'scatter',
+                        marker: { size: 7, color: '#636EFA', opacity: 0.6 },
+                        hovertemplate: '%{text}<br>Dim1=%{x:.2f}<br>Dim2=%{y:.2f}<extra></extra>',
+                    }], {
+                        xaxis: { title: 'Dimension 1' }, yaxis: { title: 'Dimension 2' },
+                        margin: { t: 20 },
+                    }, { responsive: true });
+                }
+            }
+            }
+
+            // ══════════════════════════════════════════════════════════════════
+            // Simple PCA 2D projection for cluster scatter visualization
+            // ══════════════════════════════════════════════════════════════════
+            function simplePCA2D(matrix) {
+                const n = matrix.length;
+                const p = matrix[0].length;
+                const means = Array(p).fill(0);
+                for (const row of matrix) row.forEach((v, j) => means[j] += v);
+                means.forEach((_, j) => means[j] /= n);
+                const centered = matrix.map(row => row.map((v, j) => v - means[j]));
+                const cov = Array.from({ length: p }, () => Array(p).fill(0));
+                for (const row of centered) {
+                    for (let i = 0; i < p; i++)
+                        for (let j = 0; j < p; j++)
+                            cov[i][j] += row[i] * row[j];
+                }
+                cov.forEach(r => r.forEach((_, j, a) => a[j] /= (n - 1)));
+                function powerIteration(mat) {
+                    let v = Array(p).fill(0).map(() => Math.random());
+                    for (let iter = 0; iter < 100; iter++) {
+                        let nv = Array(p).fill(0);
+                        for (let i = 0; i < p; i++)
+                            for (let j = 0; j < p; j++)
+                                nv[i] += mat[i][j] * v[j];
+                        const norm = Math.sqrt(nv.reduce((s, x) => s + x * x, 0));
+                        v = nv.map(x => x / (norm || 1));
+                    }
+                    const eigenvalue = v.reduce((s, vi, i) => {
+                        let row = 0;
+                        for (let j = 0; j < p; j++) row += mat[i][j] * v[j];
+                        return s + vi * row;
+                    }, 0);
+                    return { vec: v, val: eigenvalue };
+                }
+                const e1 = powerIteration(cov);
+                const cov2 = cov.map((row, i) => row.map((val, j) => val - e1.val * e1.vec[i] * e1.vec[j]));
+                const e2 = powerIteration(cov2);
+                return centered.map(row => [
+                    row.reduce((s, v, j) => s + v * e1.vec[j], 0),
+                    row.reduce((s, v, j) => s + v * e2.vec[j], 0),
+                ]);
+            }
+
+            // ══════════════════════════════════════════════════════════════════
+            // Simple k-means for client-side cluster colouring (k=3, 20 iters)
+            // ══════════════════════════════════════════════════════════════════
+            function simpleKMeans(x, y, z, k) {
+            const n = x.length;
+            // Random init
+            let centroids = [];
+            const used = new Set();
+            while (centroids.length < k) {
+            const idx = Math.floor(Math.random() * n);
+            if (!used.has(idx)) {
             used.add(idx);
             centroids.push([x[idx], y[idx], z[idx]]);
-        }
-    }
+            }
+            }
 
-    let labels = new Array(n).fill(0);
-    for (let iter = 0; iter < 20; iter++) {
-        // Assign
-        for (let i = 0; i < n; i++) {
+            let labels = new Array(n).fill(0);
+            for (let iter = 0; iter < 20; iter++) {
+            // Assign
+            for (let i = 0; i < n; i++) {
             let minDist = Infinity, best = 0;
             for (let c = 0; c < k; c++) {
-                const d = (x[i] - centroids[c][0]) ** 2 +
-                          (y[i] - centroids[c][1]) ** 2 +
-                          (z[i] - centroids[c][2]) ** 2;
-                if (d < minDist) { minDist = d; best = c; }
+            const d = (x[i] - centroids[c][0]) ** 2 +
+            (y[i] - centroids[c][1]) ** 2 +
+            (z[i] - centroids[c][2]) ** 2;
+            if (d < minDist) { minDist = d; best = c; }
             }
             labels[i] = best;
-        }
-        // Update centroids
-        for (let c = 0; c < k; c++) {
+            }
+            // Update centroids
+            for (let c = 0; c < k; c++) {
             let sx = 0, sy = 0, sz = 0, cnt = 0;
             for (let i = 0; i < n; i++) {
-                if (labels[i] === c) { sx += x[i]; sy += y[i]; sz += z[i]; cnt++; }
+            if (labels[i] === c) { sx += x[i]; sy += y[i]; sz += z[i]; cnt++; }
             }
             if (cnt > 0) centroids[c] = [sx / cnt, sy / cnt, sz / cnt];
-        }
+            }
+            }
+            return labels;
+            }
+        </script>
     }
-    return labels;
-}
-</script>
-}
